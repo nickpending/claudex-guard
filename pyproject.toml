@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "claudex-guard"
+version = "0.1.0"
+description = "Automated code quality enforcement for AI-assisted development workflows"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Rudy Ruiz", email = "rudy@voidwire.info"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers", 
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Code Generators",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "ruff>=0.9.0",  # Required for Python auto-fixing
+    "mypy>=1.15.0",  # Required for type checking in Python enforcer
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.0.0",
+    "hypothesis>=6.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/nickpending/claudex-guard"
+Repository = "https://github.com/nickpending/claudex-guard"
+Issues = "https://github.com/nickpending/claudex-guard/issues"
+
+[project.scripts]
+claudex-guard-python = "claudex_guard.scripts.python:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claudex_guard"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/configs",
+    "/README.md",
+    "/LICENSE"
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings  
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true

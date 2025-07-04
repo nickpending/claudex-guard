@@ -1,0 +1,1 @@
+"""Language-specific standards and pattern definitions for claudex-guard."""

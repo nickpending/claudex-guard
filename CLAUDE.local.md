@@ -1,0 +1,1 @@
+/Users/rudy/obsidian/ai/development-workflow/claude/memory/python/CLAUDE.local.md

@@ -12,6 +12,7 @@ This is the system that eliminates /complete-task entirely.
 """
 
 import ast
+import sys
 from pathlib import Path
 from typing import List
 
@@ -25,7 +26,8 @@ from .python_auto_fixer import PythonAutoFixer
 def main() -> int:
     """Main entry point for Python quality enforcement."""
     enforcer = PythonEnforcer()
-    return enforcer.run()
+    exit_code = enforcer.run()
+    sys.exit(exit_code)
 
 
 class PythonEnforcer(BaseEnforcer):

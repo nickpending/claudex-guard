@@ -27,7 +27,8 @@ def main() -> int:
     """Main entry point for Python quality enforcement."""
     enforcer = PythonEnforcer()
     exit_code = enforcer.run()
-    sys.exit(exit_code)
+    sys.stdout.flush()  # Ensure JSON decision control is output before exit
+    return exit_code
 
 
 class PythonEnforcer(BaseEnforcer):

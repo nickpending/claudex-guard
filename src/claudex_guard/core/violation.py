@@ -92,59 +92,34 @@ class ViolationReporter:
         return any(v.severity == "error" for v in self.violations)
 
     def report(self) -> int:
-        """Report all violations and fixes to stderr. Returns exit code."""
+        """Report violations via JSON decision control for Claude. Returns exit code."""
         import sys
 
-        # Report automatic fixes
-        if self.fixes_applied:
-            print("\n✅ Automatic fixes applied:", file=sys.stderr)
-            for fix in self.fixes_applied:
-                print(f"  • {fix}", file=sys.stderr)
-
-        # Report violations
-        if self.violations:
-            print("🚨 Quality violations found:", file=sys.stderr)
-            for violation in self.violations:
-                print(f"  {violation}", file=sys.stderr)
-
-            # Context and guidance
-            if self.context_message:
-                print(f"\n📋 Context: {self.context_message}", file=sys.stderr)
-            print(
-                f"\n💡 This enforces {self.language} standards from claudex",
-                file=sys.stderr,
-            )
-            print(
-                f"📚 See ~/.claudex/standards/claudex-{self.language}.md for complete standards",
-                file=sys.stderr,
-            )
-            print(
-                "🔗 Built with claudex: https://github.com/nickpending/claudex",
-                file=sys.stderr,
-            )
-
-            # Show global reminders once per tool run
-            if self.global_reminders:
-                print("", file=sys.stderr)  # Empty line
-                for reminder in sorted(self.global_reminders):
-                    print(reminder, file=sys.stderr)
-
-            if self.has_errors():
-                print(
-                    "\n❌ Blocking due to quality standard violations", file=sys.stderr
-                )
-                return 2  # Block operation
-
-        elif self.fixes_applied:
-            print(
-                "✅ All quality standards met - proceeding with development",
-                file=sys.stderr,
-            )
-
-        # Show global reminders even on clean files (soft violations)
-        if self.global_reminders and not self.violations:
-            print("", file=sys.stderr)  # Empty line
-            for reminder in sorted(self.global_reminders):
-                print(reminder, file=sys.stderr)
+        # Only report errors via JSON decision control
+        if self.violations and self.has_errors():
+            # Claude Code decision control - block Claude from proceeding
+            import json
+            from pathlib import Path
+            
+            # Build detailed violation message for Claude
+            error_violations = [v for v in self.violations if v.severity == "error"]
+            violation_details = []
+            
+            for v in error_violations:
+                detail = f"• {Path(v.file_path).name}:{v.line_num} - {v.message}"
+                if v.fix_suggestion:
+                    detail += f"\n  Fix: {v.fix_suggestion}"
+                violation_details.append(detail)
+            
+            # Include all details in the reason field for Claude
+            reason = f"Quality violations found ({len(error_violations)} errors):\n" + "\n".join(violation_details)
+            
+            decision = {
+                "decision": "block",
+                "reason": reason
+            }
+            print(json.dumps(decision))  # stdout for Claude decision control
+            
+            return 2  # Block operation
 
         return 0  # Success

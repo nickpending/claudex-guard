@@ -28,52 +28,36 @@ class BaseEnforcer(ABC):
         pass
 
     def get_file_path_from_hook_context(self) -> Optional[Path]:
-        """Extract file path from Claude Code hook context (matches monolithic script behavior)."""
+        """Extract file path from Claude Code hook context."""
         try:
-            # Read hook context from stdin (Claude passes tool context this way)
-            stdin_data = sys.stdin.read()
-            file_path = None
+            # Method 1: Claude Code environment variable (preferred - simple and reliable)
+            claude_file_paths = os.environ.get("CLAUDE_FILE_PATHS", "")
+            if claude_file_paths:
+                file_path = Path(claude_file_paths.split()[0])
+                if file_path.exists():
+                    return file_path
 
+            # Method 2: JSON stdin (fallback for compatibility)
+            stdin_data = sys.stdin.read()
             if stdin_data.strip():
                 hook_data = json.loads(stdin_data)
-
-                # Try tool_input path first (that's where Claude puts it)
                 tool_input = hook_data.get("tool_input", {})
                 file_path_str = tool_input.get("file_path", "")
                 if file_path_str:
                     file_path = Path(file_path_str)
-                    if not file_path.exists() or str(file_path) == ".":
-                        # Fallback to top-level file_path
-                        file_path_str = hook_data.get("file_path", "")
-                        if file_path_str:
-                            file_path = Path(file_path_str)
-                        else:
-                            file_path = None
-                else:
-                    # Try top-level file_path directly
-                    file_path_str = hook_data.get("file_path", "")
-                    if file_path_str:
-                        file_path = Path(file_path_str)
-                    else:
-                        file_path = None
-            else:
-                # No stdin data, try environment variables
-                claude_file_paths = os.environ.get("CLAUDE_FILE_PATHS", "")
-                if claude_file_paths:
-                    file_path = Path(claude_file_paths.split()[0])
-                else:
-                    # Fallback to command line args
-                    if len(sys.argv) < 2:
-                        return None  # Graceful exit instead of sys.exit(0)
-                    file_path = Path(sys.argv[1])
+                    if file_path.exists():
+                        return file_path
 
-            if not file_path or not file_path.exists():
-                return None  # Graceful exit instead of sys.exit(0)
+            # Method 3: Command line args (testing/standalone use)
+            if len(sys.argv) > 1:
+                file_path = Path(sys.argv[1])
+                if file_path.exists():
+                    return file_path
 
-            return file_path
+            return None
 
         except Exception:
-            return None  # Graceful return instead of sys.exit(1)
+            return None
 
     def should_analyze_file(self, file_path: Path) -> bool:
         """Check if file should be analyzed by this enforcer."""

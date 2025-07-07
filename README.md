@@ -61,24 +61,16 @@ def bad_function(items=[]):  # Mutable default argument
     return result
 ```
 
-Output:
+Claude receives violation details via JSON decision control:
 ```
-✅ Automatic fixes applied:
-  • Applied ruff formatting
-  • Type issues found: 2 (review needed)
-🚨 Quality violations found:
-  📍 example.py:1 - Mutable default argument in function 'bad_function'
-  💡 Fix: Use None default, check inside function (classic Python gotcha)
-  📍 example.py:2 - Use f-strings instead of % formatting (modern Python)
-
-💡 This enforces python standards from claudex
-📚 See ~/.claudex/standards/claudex-python.md for complete standards
-🔗 Built with claudex: https://github.com/nickpending/claudex
-
-💡 Consider logging for production code or rich.print() for enhanced output
-
-❌ Blocking due to quality standard violations
+Quality violations found (2 errors):
+• example.py:1 - Mutable default argument in function 'bad_function'
+  Fix: Use None default, check inside function (classic Python gotcha)
+• example.py:2 - Use f-strings instead of % formatting (modern Python)
+  Fix: Replace with f"Hello {name}!" syntax
 ```
+
+**Note**: If you see duplicate messages, run Claude Code from within a project directory rather than from `~/`.
 
 ## Supported Languages
 
@@ -194,22 +186,42 @@ echo '{"tool_input": {"file_path": "your_file.py"}}' | claudex-guard-python
 
 ### Claude Code Hooks
 
-claudex-guard integrates with Claude Code's PostToolUse hook system:
+claudex-guard integrates with Claude Code's PostToolUse hook system.
+
+**Add to your `~/.claude/settings.json`:**
 
 ```json
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "pattern": "**/*.py",
+    "PostToolUse": [{
+      "matcher": "Edit|Write",
+      "hooks": [{
+        "type": "command",
         "command": "claudex-guard-python"
-      }
-    ]
+      }]
+    }]
   }
 }
 ```
 
-**Note**: After `uv tool install .`, the command is globally available, so you just reference `claudex-guard-python` directly in your Claude Code settings.
+**How it works:**
+- Hook triggers on any `Edit` or `Write` tool use
+- Tool checks file extension (only processes .py files)
+- If violations found, outputs JSON decision control to block Claude
+- Claude receives detailed violation information and fix suggestions
+
+**Note**: After `uv tool install .`, the command is globally available.
+
+## Troubleshooting
+
+### Duplicate Messages
+If you see duplicate violation messages, run Claude Code from within a project directory rather than from `~/`. This is due to how Claude Code handles hooks when launched from the home directory.
+
+### Hook Not Running
+- Verify global installation: `which claudex-guard-python`
+- Check hook configuration in `~/.claude/settings.json`
+- Restart Claude Code after configuration changes
+- Ensure you're editing .py files (tool only processes Python files)
 
 ### Other AI Assistants
 

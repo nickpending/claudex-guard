@@ -76,3 +76,6 @@ IDEA.md
 
 # Temporary test files
 /tmp/test_*.py
+
+# Research and development notes (keep local)
+research/

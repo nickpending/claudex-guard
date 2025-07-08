@@ -51,16 +51,29 @@ class PythonAutoFixer:
         return False
 
     def _run_ruff_check_fix(self, file_path: Path) -> bool:
-        """Run ruff linting with automatic fixes."""
+        """Run ruff linting with automatic fixes (development mode - preserve imports)."""
         try:
+            # During development, skip import-related fixes to avoid LLM timing conflicts
+            # Full import cleanup happens later during /complete-task
             result = subprocess.run(
-                ["ruff", "check", "--fix", str(file_path)],
+                [
+                    "ruff",
+                    "check",
+                    "--fix",
+                    str(file_path),
+                    "--ignore=F401",  # Don't remove unused imports (LLM still working)
+                    "--ignore=I001",  # Don't sort imports (LLM still adding them)
+                    "--ignore=I002",  # Don't enforce import conventions yet
+                ],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
+
             if result.returncode == 0:
-                self.fixes_applied.append("Applied ruff linting fixes")
+                self.fixes_applied.append(
+                    "Applied development auto-fixes (imports preserved)"
+                )
                 return True
             elif result.stderr:
                 self.fixes_applied.append(

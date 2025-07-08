@@ -715,10 +715,26 @@ class PythonPatterns:
                 f_string_content = " ".join(f_string_parts)
 
                 # Check if this looks like SQL with user input
-                if (
-                    any(keyword in f_string_content for keyword in sql_keywords)
-                    and len(node.values) > 1
-                ):
+                # Must have SQL keywords AND look like actual query structure
+                looks_like_sql = any(
+                    keyword in f_string_content for keyword in sql_keywords
+                )
+                has_variables = len(node.values) > 1
+
+                # More specific SQL pattern detection - must look like actual SQL
+                sql_patterns = [
+                    "SELECT * FROM",
+                    "INSERT INTO",
+                    "UPDATE SET",
+                    "DELETE FROM",
+                    "WHERE",
+                    "VALUES",
+                ]
+                looks_like_actual_sql = any(
+                    pattern in f_string_content for pattern in sql_patterns
+                )
+
+                if looks_like_sql and has_variables and looks_like_actual_sql:
                     # Has both SQL keywords and variables (potential injection)
                     self.violations.append(
                         Violation(
@@ -951,22 +967,53 @@ class PythonPatterns:
                 self.generic_visit(node)
 
             def _check_banned_import(self, import_name: str, line_num: int):
-                for banned, suggestion in self.patterns.BANNED_IMPORTS.items():
-                    if import_name == banned or import_name.startswith(banned + "."):
-                        self.violations.append(
-                            Violation(
-                                str(self.file_path),
-                                line_num,
-                                "banned_import",
-                                f"Banned import: {import_name}",
-                                suggestion,
-                                "error",
-                                language_context={
-                                    "import_name": import_name,
-                                    "banned_module": banned,
-                                },
-                            )
-                        )
+                # Context-aware import checking
+                is_test_file = "test" in str(self.file_path)
+
+                # Special cases first
+                if import_name == "urllib.parse":
+                    # urllib.parse is OK for URL parsing - don't flag it
+                    return
+                elif import_name == "unittest" and is_test_file:
+                    suggestion = "Use pytest fixtures and pytest-mock (unittest.mock is OK in tests)"
+                elif import_name == "unittest.mock" and is_test_file:
+                    # unittest.mock is explicitly OK in test files per standards
+                    return
+                else:
+                    # Check standard banned imports
+                    suggestion = None
+                    banned_match = None
+
+                    for (
+                        banned,
+                        default_suggestion,
+                    ) in self.patterns.BANNED_IMPORTS.items():
+                        if import_name == banned or import_name.startswith(
+                            banned + "."
+                        ):
+                            suggestion = default_suggestion
+                            banned_match = banned
+                            break
+
+                    if not suggestion:
+                        return  # Not a banned import
+
+                # Add violation with context-aware message
+                self.violations.append(
+                    Violation(
+                        str(self.file_path),
+                        line_num,
+                        "banned_import",
+                        f"Banned import: {import_name}",
+                        suggestion,
+                        "error",
+                        language_context={
+                            "import_name": import_name,
+                            "banned_module": banned_match or import_name,
+                            "is_test_file": is_test_file,
+                        },
+                    )
+                )
 
         visitor = PhilosophyVisitor(self)
         visitor.visit(tree)

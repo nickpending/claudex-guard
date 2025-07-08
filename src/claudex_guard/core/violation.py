@@ -70,10 +70,26 @@ class ViolationReporter:
         self.fixes_applied: List[str] = []
         self.context_message: Optional[str] = None
         self.global_reminders: set[str] = set()
+        self.memory = None  # Will be initialized when first violation is added
 
     def add_violation(self, violation: Violation) -> None:
-        """Add a violation to the report."""
+        """Add a violation to the report and log to memory."""
         self.violations.append(violation)
+
+        # Initialize memory on first violation
+        if self.memory is None:
+            from .violation_memory import ViolationMemory
+
+            self.memory = ViolationMemory(Path.cwd())
+
+        # Log violation to memory system (don't break main workflow if this fails)
+        try:
+            self.memory.log_violation(violation)
+        except Exception as e:
+            # Log the error but don't break violation reporting
+            import sys
+
+            print(f"Warning: Violation memory logging failed: {e}", file=sys.stderr)
 
     def add_fix(self, fix_description: str) -> None:
         """Add an applied fix to the report."""
@@ -100,26 +116,26 @@ class ViolationReporter:
             # Claude Code decision control - block Claude from proceeding
             import json
             from pathlib import Path
-            
+
             # Build detailed violation message for Claude
             error_violations = [v for v in self.violations if v.severity == "error"]
             violation_details = []
-            
+
             for v in error_violations:
                 detail = f"• {Path(v.file_path).name}:{v.line_num} - {v.message}"
                 if v.fix_suggestion:
                     detail += f"\n  Fix: {v.fix_suggestion}"
                 violation_details.append(detail)
-            
+
             # Include all details in the reason field for Claude
-            reason = f"Quality violations found ({len(error_violations)} errors):\n" + "\n".join(violation_details)
-            
-            decision = {
-                "decision": "block",
-                "reason": reason
-            }
+            reason = (
+                f"Quality violations found ({len(error_violations)} errors):\n"
+                + "\n".join(violation_details)
+            )
+
+            decision = {"decision": "block", "reason": reason}
             print(json.dumps(decision))  # stdout for Claude decision control
-            
+
             return 2  # Block operation
 
         return 0  # Success

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "claudex-guard"
-version = "0.2.2"
+version = "0.3.0"
 description = "Automated code quality enforcement for AI-assisted development workflows"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -44,7 +44,7 @@ Repository = "https://github.com/nickpending/claudex-guard"
 Issues = "https://github.com/nickpending/claudex-guard/issues"
 
 [project.scripts]
-claudex-guard-python = "claudex_guard.scripts.python:main"
+claudex-guard = "claudex_guard.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/claudex_guard"]

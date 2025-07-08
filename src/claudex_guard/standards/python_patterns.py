@@ -970,19 +970,22 @@ class PythonPatterns:
                 # Context-aware import checking
                 is_test_file = "test" in str(self.file_path)
 
+                # Initialize variables
+                suggestion = None
+                banned_match = None
+
                 # Special cases first
                 if import_name == "urllib.parse":
                     # urllib.parse is OK for URL parsing - don't flag it
                     return
                 elif import_name == "unittest" and is_test_file:
                     suggestion = "Use pytest fixtures and pytest-mock (unittest.mock is OK in tests)"
+                    banned_match = "unittest"
                 elif import_name == "unittest.mock" and is_test_file:
                     # unittest.mock is explicitly OK in test files per standards
                     return
                 else:
                     # Check standard banned imports
-                    suggestion = None
-                    banned_match = None
 
                     for (
                         banned,

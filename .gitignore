@@ -74,6 +74,9 @@ IDEA.md
 # Claude Code user config (user-specific)
 .claude/
 
+# Violation memory (project-specific, keep local)
+.claudex/
+
 # Temporary test files
 /tmp/test_*.py
 

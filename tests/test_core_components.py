@@ -15,7 +15,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from claudex_guard.core.violation import Violation, ViolationReporter
-from claudex_guard.scripts.python_auto_fixer import PythonAutoFixer
+from claudex_guard.services.auto_fixer import PythonAutoFixer
 from claudex_guard.standards.python_patterns import PythonPatterns
 
 
@@ -63,7 +63,7 @@ def good_function(items=None):  # This is safe
 def test_hook_context_extraction_fallback_chain():
     """Test that hook context extraction handles real Claude Code scenarios."""
     # Use PythonEnforcer instead of abstract BaseEnforcer
-    from claudex_guard.scripts.python import PythonEnforcer
+    from claudex_guard.enforcers.python import PythonEnforcer
 
     enforcer = PythonEnforcer()
 

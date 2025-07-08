@@ -13,7 +13,7 @@ wheels = [
 
 [[package]]
 name = "claudex-guard"
-version = "0.1.9"
+version = "0.3.3"
 source = { editable = "." }
 dependencies = [
     { name = "mypy" },

@@ -41,8 +41,16 @@ class BaseEnforcer(ABC):
             stdin_data = sys.stdin.read()
             if stdin_data.strip():
                 hook_data = json.loads(stdin_data)
+                # Try tool_input first (primary Claude Code format)
                 tool_input = hook_data.get("tool_input", {})
                 file_path_str = tool_input.get("file_path", "")
+                if file_path_str:
+                    file_path = Path(file_path_str)
+                    if file_path.exists():
+                        return file_path
+
+                # Try top-level file_path (fallback)
+                file_path_str = hook_data.get("file_path", "")
                 if file_path_str:
                     file_path = Path(file_path_str)
                     if file_path.exists():
@@ -89,8 +97,20 @@ class BaseEnforcer(ABC):
             # Report results
             return self.reporter.report()
 
-        except Exception:
-            # Don't break the workflow if analysis fails
+        except (OSError, ValueError, TypeError, ImportError) as e:
+            # Don't break the workflow if analysis fails, but log the error
+            import sys
+
+            print(f"Error: Analysis failed: {e}", file=sys.stderr)
+            return 1
+        except KeyboardInterrupt:
+            # User interrupted - re-raise to allow clean shutdown
+            raise
+        except Exception as e:
+            # Unexpected error - log and fail
+            import sys
+
+            print(f"Error: Unexpected analysis failure: {e}", file=sys.stderr)
             return 1
 
 

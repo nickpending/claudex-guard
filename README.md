@@ -13,7 +13,7 @@ claudex-guard provides real-time code quality enforcement integrated with AI cod
 - **🤖 AI Integration**: Enhanced Claude Code hooks with global reminder system
 - **📚 Standards-Based**: References `~/.claudex/standards/claudex-python.md`
 - **⚡ Real-time**: Non-blocking soft violations for better UX
-- **🧪 Comprehensive Testing**: 27 tests (integration + unit) ensuring reliability
+- **🧪 Comprehensive Testing**: 43 tests (integration + unit) ensuring reliability
 
 ## Quick Start
 
@@ -47,7 +47,7 @@ uv sync
 uv run pytest tests/ -v
 
 # Test the tool directly
-echo '{"tool_input": {"file_path": "your_file.py"}}' | uv run claudex-guard-python
+echo '{"tool_input": {"file_path": "your_file.py"}}' | uv run python -m claudex_guard.main
 ```
 
 ### Usage
@@ -81,7 +81,7 @@ Quality violations found (2 errors):
 
 ## Architecture
 
-**Modular Composition Design** (Refactored 2025-07-04):
+**Modular Composition Design** (Refactored 2025-07-08):
 
 ```
 claudex-guard/
@@ -89,27 +89,35 @@ claudex-guard/
 │   ├── core/                    # Enhanced shared infrastructure
 │   │   ├── base_enforcer.py     # Abstract base for all enforcers
 │   │   ├── violation.py         # Enhanced reporting with global reminders
+│   │   ├── violation_memory.py  # Violation tracking and memory
 │   │   └── utils.py             # Shared utilities
 │   ├── standards/               # Extracted pattern definitions
 │   │   └── python_patterns.py   # Python pattern detection logic
-│   ├── scripts/                 # Modular language enforcers
-│   │   ├── python.py            # Refactored enforcer (89 lines, was 661)
-│   │   └── python_auto_fixer.py # Extracted automatic fixing
-│   └── install.py               # Claude Code integration
+│   ├── enforcers/               # Language-specific enforcers
+│   │   └── python.py            # Python enforcer (clean, modular)
+│   ├── hooks/                   # Claude Code integration
+│   │   └── pre_hook.py          # Hook integration logic
+│   ├── services/                # Supporting services
+│   │   └── auto_fixer.py        # Automatic code fixing
+│   └── main.py                  # CLI entry point
 ├── configs/                     # External standards files
-└── tests/                       # 27 comprehensive tests
+└── tests/                       # 43 comprehensive tests
     ├── test_python_patterns.py         # Pattern detection tests
     ├── test_python_enforcer_integration.py # End-to-end tests
+    ├── test_comprehensive_ast_detection.py # AST analysis tests
+    ├── test_phase1_standards_coverage.py   # Standards coverage
+    ├── test_phase2_comprehensive.py        # Advanced pattern tests
     └── test_core_components.py         # Component unit tests
 ```
 
 ## Python Enforcer Features
 
-### Modular Architecture (2025-07-04 Refactor)
-- **87% Code Reduction**: 661 → 89 lines via composition
+### Modular Architecture (2025-07-08 Refactor)
+- **Standard Package Structure**: Moved from non-standard scripts/ to proper Python modules
+- **Clean Separation**: enforcers/, hooks/, services/, standards/ for clear responsibilities
 - **BaseEnforcer Pattern**: Ready for JavaScript/Rust expansion  
 - **Global Reminder System**: Non-spammy soft violation guidance
-- **Enhanced Testing**: 27 comprehensive tests ensuring reliability
+- **Comprehensive Testing**: 43 tests ensuring reliability (100% pass rate)
 
 ### Pattern Detection
 - **Security**: `eval()`, `exec()`, SQL injection patterns
@@ -163,7 +171,7 @@ cp configs/claudex-python.md configs/claudex-newlang.md
 
 ### Testing
 
-**Comprehensive Test Suite (27 tests)**:
+**Comprehensive Test Suite (43 tests)**:
 
 ```bash
 # Run all tests
@@ -174,19 +182,23 @@ uv run python tests/test_core_components.py        # Unit tests
 uv run python tests/test_python_enforcer_integration.py  # Integration tests
 
 # Test enforcer directly
-echo '{"tool_input": {"file_path": "your_file.py"}}' | claudex-guard-python
+echo '{"tool_input": {"file_path": "your_file.py"}}' | uv run python -m claudex_guard.main
 ```
 
 **Test Coverage**:
 - 8 integration tests (end-to-end hook scenarios)
 - 7 component unit tests (bug detection)
-- 12 pattern detection tests (comprehensive violations)
+- 13 pattern detection tests (comprehensive violations)
+- 15 standards coverage tests (Phase 1 & 2 patterns)
+- AST analysis and performance tests
 
 ## Integration
 
 ### Claude Code Hooks
 
-claudex-guard integrates with Claude Code's PostToolUse hook system.
+claudex-guard integrates with Claude Code's hook system in two modes:
+
+#### PostToolUse (Working - Recommended)
 
 **Add to your `~/.claude/settings.json`:**
 
@@ -197,7 +209,7 @@ claudex-guard integrates with Claude Code's PostToolUse hook system.
       "matcher": "Edit|Write",
       "hooks": [{
         "type": "command",
-        "command": "claudex-guard-python"
+        "command": "claudex-guard --mode post"
       }]
     }]
   }
@@ -205,10 +217,41 @@ claudex-guard integrates with Claude Code's PostToolUse hook system.
 ```
 
 **How it works:**
-- Hook triggers on any `Edit` or `Write` tool use
+- Hook triggers after any `Edit` or `Write` tool use
 - Tool checks file extension (only processes .py files)
 - If violations found, outputs JSON decision control to block Claude
 - Claude receives detailed violation information and fix suggestions
+
+#### PreToolUse (Experimental - Context Only)
+
+**Add to your `~/.claude/settings.json`:**
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Edit|Write",
+      "hooks": [{
+        "type": "command",
+        "command": "claudex-guard --mode pre"
+      }]
+    }]
+  }
+}
+```
+
+**⚠️ Current Limitation**: PreToolUse hooks are designed for blocking/approval decisions, not context injection. Claude doesn't see the hook output content, so violation history context isn't available to Claude during tool use.
+
+**Manual Workaround**: Use the generated `.claudex-guard/memory.md` file:
+
+```bash
+# View the violation memory file
+cat .claudex-guard/memory.md
+
+# Add its contents to your CLAUDE.md or CLAUDE.local.md for manual context
+```
+
+This file contains a summary of recent violations that helps Claude understand your coding patterns and preferences.
 
 **Note**: After `uv tool install .`, the command is globally available.
 
@@ -218,7 +261,7 @@ claudex-guard integrates with Claude Code's PostToolUse hook system.
 If you see duplicate violation messages, run Claude Code from within a project directory rather than from `~/`. This is due to how Claude Code handles hooks when launched from the home directory.
 
 ### Hook Not Running
-- Verify global installation: `which claudex-guard-python`
+- Verify global installation: `which claudex-guard`
 - Check hook configuration in `~/.claude/settings.json`
 - Restart Claude Code after configuration changes
 - Ensure you're editing .py files (tool only processes Python files)
@@ -228,7 +271,7 @@ If you see duplicate violation messages, run Claude Code from within a project d
 While built for Claude Code, the enforcers can be used standalone:
 
 ```bash
-python scripts/claudex-guard-python.py your_file.py
+uv run python -m claudex_guard.main your_file.py
 ```
 
 ## Contributing

@@ -59,6 +59,21 @@ class PythonPatterns:
             "context_managers": r"with open\(",
         }
 
+        # Mock detection configuration (strict mode by default)
+        self.MOCK_PATTERNS = {
+            "decorators": ["mock.patch", "patch", "mock.patch.object", "patch.object"],
+            "constructors": ["Mock", "MagicMock", "AsyncMock", "PropertyMock"],
+            "functions": ["create_autospec", "patch", "patch.object", "patch.multiple"],
+            "modules": ["unittest.mock", "mock", "pytest_mock", "unittest.mock"],
+        }
+        
+        # Patterns that are allowed to be mocked (can be configured)
+        # Empty by default in strict mode - everything blocked unless explicitly allowed
+        self.ALLOWED_MOCK_PATTERNS = []
+        
+        # Load project config if exists
+        self._load_mock_config()
+
         # Anti-patterns that violate coding standards
         self.ANTIPATTERNS = [
             # Classic Python gotchas
@@ -94,6 +109,24 @@ class PythonPatterns:
             # NOTE: Type hints moved to AST analysis (visit_Attribute) for accuracy
         ]
 
+    def _load_mock_config(self):
+        """Load mock detection configuration from .claudex-guard.yaml if exists."""
+        from pathlib import Path
+        import yaml
+        
+        config_file = Path.cwd() / ".claudex-guard.yaml"
+        if config_file.exists():
+            try:
+                with open(config_file) as f:
+                    config = yaml.safe_load(f)
+                    if config and "mock_detection" in config:
+                        mock_config = config["mock_detection"]
+                        if "allowed_patterns" in mock_config:
+                            self.ALLOWED_MOCK_PATTERNS = mock_config["allowed_patterns"]
+            except Exception:
+                # Silently continue with defaults if config fails
+                pass
+
     def get_banned_imports(self) -> Dict[str, str]:
         """Get dictionary of banned imports and their replacements."""
         return self.BANNED_IMPORTS
@@ -117,6 +150,28 @@ class PythonPatterns:
                 self.violations = violations
 
             def visit_FunctionDef(self, node) -> None:
+                # Check for mock decorators in test files
+                if self._is_test_file() and node.decorator_list:
+                    for decorator in node.decorator_list:
+                        mock_target = None
+                        
+                        if isinstance(decorator, ast.Call):
+                            if isinstance(decorator.func, ast.Name):
+                                # @patch('target')
+                                if decorator.func.id in ["patch", "mock_patch"]:
+                                    if decorator.args and isinstance(decorator.args[0], ast.Constant):
+                                        mock_target = decorator.args[0].value
+                            elif isinstance(decorator.func, ast.Attribute):
+                                # @mock.patch('target') or @patch.object(...)
+                                if (isinstance(decorator.func.value, ast.Name) and 
+                                    decorator.func.value.id in ["mock", "unittest"] and 
+                                    decorator.func.attr in ["patch", "patch.object"]):
+                                    if decorator.args and isinstance(decorator.args[0], ast.Constant):
+                                        mock_target = decorator.args[0].value
+                        
+                        if mock_target:
+                            self._check_mock_violation(mock_target, decorator.lineno, "decorator")
+                
                 # Check for type hints on functions (Rudy's requirement)
                 if not node.returns and not node.name.startswith("_"):
                     self.violations.append(
@@ -527,6 +582,12 @@ class PythonPatterns:
                                 },
                             )
                         )
+                    
+                    # Mock constructor detection (Mock(), MagicMock(), etc.)
+                    elif func_name in self.patterns.MOCK_PATTERNS["constructors"]:
+                        if self._is_test_file():
+                            # In test files, block all mock constructors in strict mode
+                            self._check_mock_violation(func_name, node.lineno, "constructor")
 
                 # Check for pickle module usage (security risk)
                 elif (
@@ -1016,6 +1077,73 @@ class PythonPatterns:
                             "is_test_file": is_test_file,
                         },
                     )
+                )
+            
+            
+            def _is_test_file(self) -> bool:
+                """Check if current file is a test file."""
+                file_str = str(self.file_path).lower()
+                file_name = self.file_path.name.lower()
+                
+                # Check file name patterns
+                if file_name.startswith("test_") or file_name.endswith("_test.py"):
+                    return True
+                
+                # Check if in test directory
+                if "/tests/" in file_str or "/test/" in file_str:
+                    return True
+                    
+                return False
+            
+            def _check_mock_violation(self, mock_target: str, line_num: int, mock_type: str):
+                """Check if a mock target is allowed or should be blocked."""
+                # Check for inline escape hatch comment
+                if self._has_escape_hatch(line_num):
+                    return
+                
+                # Check against allowed patterns from config
+                for pattern in self.patterns.ALLOWED_MOCK_PATTERNS:
+                    import fnmatch
+                    if fnmatch.fnmatch(mock_target, pattern):
+                        return
+                
+                # In strict mode, everything else is blocked
+                self.violations.append(
+                    Violation(
+                        str(self.file_path),
+                        line_num,
+                        "mock_violation",
+                        f"Mocking '{mock_target}' detected",
+                        self._get_mock_fix_suggestion(mock_target, mock_type),
+                        "error",
+                        language_context={
+                            "pattern": "mock_detection",
+                            "mock_type": mock_type,
+                            "mock_target": mock_target,
+                        },
+                    )
+                )
+            
+            def _has_escape_hatch(self, line_num: int) -> bool:
+                """Check if line has an escape hatch comment."""
+                # This would need access to the actual file lines
+                # For now, return False - can be enhanced later
+                return False
+            
+            def _get_mock_fix_suggestion(self, mock_target: str, mock_type: str) -> str:
+                """Generate helpful fix suggestion for mock violations."""
+                return (
+                    f"❌ MOCKING VIOLATION: '{mock_target}'\n\n"
+                    "Per best practices ('Don't Mock What You Don't Own'):\n"
+                    "1. Create a wrapper/adapter around external dependencies\n"
+                    "2. Mock your wrapper, not the external library\n"
+                    "3. Use real integration tests for the wrapper\n\n"
+                    "✅ If this mock is necessary, add an escape hatch:\n"
+                    f"   @mock.patch('{mock_target}')  # claudex-guard: allow-mock\n\n"
+                    "Or add to .claudex-guard.yaml:\n"
+                    "   mock_detection:\n"
+                    "     allowed_patterns:\n"
+                    f"       - '{mock_target}'"
                 )
 
         visitor = PhilosophyVisitor(self)

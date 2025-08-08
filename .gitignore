@@ -68,17 +68,17 @@ htmlcov/
 # uv lock file (included for reproducible builds)
 # uv.lock
 
-# Project documentation (keep local)
-IDEA.md
-
 # Claude Code user config (user-specific)
 .claude/
 
 # Violation memory (project-specific, keep local)
-.claudex/
+.claudex-guard/
+
+# Workflow system (local development)
+.workflow/
+
+# Agent directories
+.agent/
 
 # Temporary test files
 /tmp/test_*.py
-
-# Research and development notes (keep local)
-research/

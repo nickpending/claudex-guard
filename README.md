@@ -10,6 +10,7 @@ claudex-guard provides real-time code quality enforcement integrated with AI cod
 
 - **🐍 Python Enforcement**: Modular AST analysis (661→89 lines, 87% reduction)
 - **🔧 Automatic Fixes**: Integration with ruff formatting/linting and mypy type checking
+- **🛡️ Mock Detection**: Strict enforcement of "Don't Mock What You Don't Own" principle
 - **🤖 AI Integration**: Enhanced Claude Code hooks with global reminder system
 - **📚 Standards-Based**: References `~/.claudex/standards/claudex-python.md`
 - **⚡ Real-time**: Non-blocking soft violations for better UX
@@ -125,11 +126,31 @@ claudex-guard/
 - **Modern Python**: f-strings, pathlib, type hints, banned legacy imports
 - **Environment**: uv over pip/poetry, proper virtual environments
 - **Anti-patterns**: Mutable defaults, bare except clauses, late binding closures
+- **Mock Detection**: Enforces "Don't Mock What You Don't Own" - blocks internal code mocking
 
 ### Smart Violation System
 - **Hard Violations**: Block development (mutable defaults, eval, bare except)
 - **Soft Violations**: Show global reminders (print usage guidance)
 - **Standards Integration**: Points to `~/.claudex/standards/claudex-python.md`
+
+### Mock Detection System (v0.3.4+)
+Enforces the "Don't Mock What You Don't Own" principle to prevent brittle tests:
+
+- **Blocks Internal Mocking**: Prevents mocking your own code/services
+- **Allows External APIs**: External services (OpenAI, Stripe, etc.) can be configured as allowed
+- **Test File Aware**: Strict enforcement in test files (`test_*.py`, `*_test.py`)
+- **Configurable**: Use `.claudex-guard.yaml` to allow specific patterns
+- **Escape Hatch**: Use `# claudex-guard: disable-mock` to allow specific lines
+
+Example configuration (`.claudex-guard.yaml`):
+```yaml
+mock_detection:
+  allowed_patterns:
+    - "openai.*"      # Allow mocking OpenAI API
+    - "stripe.*"      # Allow mocking Stripe API  
+    - "requests.*"    # Allow mocking external HTTP requests
+    - "boto3.*"       # Allow mocking AWS services
+```
 
 ### Automatic Fixes
 - ruff formatting and linting integration
@@ -145,8 +166,16 @@ cp configs/claudex-python.md your-project/
 ```
 
 ### Project-Specific Rules
-(Planned) Create `.claudex.yaml` in your project:
+Create `.claudex-guard.yaml` in your project root:
 ```yaml
+# Mock detection configuration (v0.3.4+)
+mock_detection:
+  allowed_patterns:
+    - "openai.*"      # External API mocking allowed
+    - "stripe.*"      # External service mocking allowed
+    - "requests.*"    # HTTP library mocking allowed
+
+# Python enforcement (planned)
 python:
   enforce_type_hints: true
   allow_print_statements: false

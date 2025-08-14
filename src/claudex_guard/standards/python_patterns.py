@@ -112,7 +112,12 @@ class PythonPatterns:
     def _load_mock_config(self):
         """Load mock detection configuration from .claudex-guard.yaml if exists."""
         from pathlib import Path
-        import yaml
+        
+        try:
+            import yaml
+        except ImportError:
+            # PyYAML not installed - skip config loading
+            return
         
         config_file = Path.cwd() / ".claudex-guard.yaml"
         if config_file.exists():

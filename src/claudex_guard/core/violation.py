@@ -66,25 +66,32 @@ class ViolationReporter:
 
     def __init__(self, language: str):
         self.language = language
+        self.project_root: Optional[Path] = None
         self.violations: List[Violation] = []
         self.fixes_applied: List[str] = []
         self.context_message: Optional[str] = None
         self.global_reminders: set[str] = set()
         self.memory = None  # Will be initialized when first violation is added
 
+    def set_project_root(self, project_root: Optional[Path]) -> None:
+        """Set the project root for memory system."""
+        self.project_root = project_root
+
     def add_violation(self, violation: Violation) -> None:
         """Add a violation to the report and log to memory."""
         self.violations.append(violation)
 
-        # Initialize memory on first violation
+        # Initialize memory on first violation with proper project root
         if self.memory is None:
             from .violation_memory import ViolationMemory
 
-            self.memory = ViolationMemory(Path.cwd())
+            # Pass project root if available for proper project hash
+            self.memory = ViolationMemory(self.project_root)
 
         # Log violation to memory system (don't break main workflow if this fails)
         try:
-            self.memory.log_violation(violation)
+            if self.memory:
+                self.memory.log_violation(violation, self.language)
         except Exception as e:
             # Log the error but don't break violation reporting
             import sys

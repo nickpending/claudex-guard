@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from .violation import Violation, ViolationReporter
+from .project_cache import ProjectRootCache
 
 
 class BaseEnforcer(ABC):
@@ -16,6 +17,7 @@ class BaseEnforcer(ABC):
     def __init__(self, language: str):
         self.language = language
         self.reporter = ViolationReporter(language)
+        self.cache = ProjectRootCache()
 
     @abstractmethod
     def analyze_file(self, file_path: Path) -> List[Violation]:
@@ -84,6 +86,13 @@ class BaseEnforcer(ABC):
             if not file_path or not self.should_analyze_file(file_path):
                 return 0
 
+            # Create workflow context to determine project root
+            workflow_context = WorkflowContext(file_path)
+            
+            # Pass project root to reporter for centralized memory storage
+            if workflow_context.project_root:
+                self.reporter.set_project_root(workflow_context.project_root)
+
             # Apply automatic fixes first
             fixes = self.apply_automatic_fixes(file_path)
             for fix in fixes:
@@ -119,17 +128,91 @@ class WorkflowContext:
 
     def __init__(self, file_path: Path):
         self.file_path = file_path
-        self.project_root = self._find_project_root()
+        self.cache = ProjectRootCache()
+        
+        # Try to get from cache first
+        self.project_root = self.cache.get_project_root(file_path)
+        
+        # If not cached, discover and cache it
+        if self.project_root is None:
+            self.project_root = self._find_project_root()
+            if self.project_root:
+                # Determine what markers we found
+                markers = self._get_found_markers(self.project_root)
+                self.cache.add_project_root(file_path, self.project_root, markers)
+        
         self.is_development_project = self._is_development_project()
 
     def _find_project_root(self) -> Optional[Path]:
-        """Find project root by looking for development workflow markers."""
+        """Find project root by looking for development workflow markers.
+        
+        Priority order (searches ALL directories then picks highest priority):
+        1. Git repository root (.git directory)  
+        2. Language-specific project files (pyproject.toml, package.json, etc.)
+        3. Claude configuration markers (.claude/, CLAUDE.md)
+        """
+        # Collect all potential roots with their priority
+        candidates = []
+        
         current = self.file_path.parent
         while current != current.parent:
+            # Priority 1: Git repository root - most definitive
+            if (current / ".git").exists():
+                candidates.append((1, current))
+            
+            # Priority 2: Language-specific project markers
+            project_markers = [
+                "pyproject.toml",  # Python with modern tooling
+                "setup.py",        # Python legacy
+                "package.json",    # JavaScript/TypeScript
+                "Cargo.toml",      # Rust
+                "go.mod",          # Go
+                "pom.xml",         # Java/Maven
+                "build.gradle",    # Java/Gradle
+                "Gemfile",         # Ruby
+                "mix.exs",         # Elixir
+                "composer.json",   # PHP
+            ]
+            if any((current / marker).exists() for marker in project_markers):
+                candidates.append((2, current))
+            
+            # Priority 3: Claude configuration (might be subdirectory configs)
             if (current / ".claude").exists() or (current / "CLAUDE.md").exists():
-                return current
+                candidates.append((3, current))
+            
             current = current.parent
+        
+        # Return the highest priority (lowest number) candidate
+        if candidates:
+            # Sort by priority (ascending) then by path depth (descending to prefer root)
+            candidates.sort(key=lambda x: (x[0], -len(x[1].parts)))
+            return candidates[0][1]
+        
         return None
+    
+    def _get_found_markers(self, root: Path) -> List[str]:
+        """Get list of markers found at the project root."""
+        markers = []
+        
+        if (root / ".git").exists():
+            markers.append(".git")
+        
+        project_files = [
+            "pyproject.toml", "setup.py", "package.json", 
+            "Cargo.toml", "go.mod", "pom.xml", "build.gradle",
+            "Gemfile", "mix.exs", "composer.json"
+        ]
+        
+        for marker in project_files:
+            if (root / marker).exists():
+                markers.append(marker)
+        
+        if (root / ".claude").exists():
+            markers.append(".claude")
+        if (root / "CLAUDE.md").exists():
+            markers.append("CLAUDE.md")
+        
+        return markers
 
     def _is_development_project(self) -> bool:
         """Check if this is a systematic development project."""

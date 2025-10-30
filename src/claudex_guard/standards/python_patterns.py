@@ -3,7 +3,6 @@
 import ast
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 from ..core.violation import Violation
 
@@ -66,11 +65,11 @@ class PythonPatterns:
             "functions": ["create_autospec", "patch", "patch.object", "patch.multiple"],
             "modules": ["unittest.mock", "mock", "pytest_mock", "unittest.mock"],
         }
-        
+
         # Patterns that are allowed to be mocked (can be configured)
         # Empty by default in strict mode - everything blocked unless explicitly allowed
         self.ALLOWED_MOCK_PATTERNS = []
-        
+
         # Load project config if exists
         self._load_mock_config()
 
@@ -91,11 +90,8 @@ class PythonPatterns:
             # - % formatting: visit_BinOp()
             # - .format(): visit_Call()
             # NOTE: Path handling moved to AST analysis (visit_Attribute) for accuracy
-            # Closure gotchas
-            (
-                r"lambda\s+[^:]*:\s*\w+",
-                "Late binding closure in loop (potential gotcha)",
-            ),
+            # NOTE: Late binding closure detection removed - regex too unreliable (false positives)
+            #       If needed in future, implement proper AST-based detection in visit_Lambda
             # NOTE: Security violations moved to AST analysis (visit_Call) for accuracy
             # Environment management violations (moved to shell context)
             # NOTE: Shell command patterns belong in bash-guard, not Python code analysis
@@ -112,13 +108,13 @@ class PythonPatterns:
     def _load_mock_config(self):
         """Load mock detection configuration from .claudex-guard.yaml if exists."""
         from pathlib import Path
-        
+
         try:
             import yaml
         except ImportError:
             # PyYAML not installed - skip config loading
             return
-        
+
         config_file = Path.cwd() / ".claudex-guard.yaml"
         if config_file.exists():
             try:
@@ -132,19 +128,19 @@ class PythonPatterns:
                 # Silently continue with defaults if config fails
                 pass
 
-    def get_banned_imports(self) -> Dict[str, str]:
+    def get_banned_imports(self) -> dict[str, str]:
         """Get dictionary of banned imports and their replacements."""
         return self.BANNED_IMPORTS
 
-    def get_required_patterns(self) -> Dict[str, str]:
+    def get_required_patterns(self) -> dict[str, str]:
         """Get dictionary of required patterns and their regex definitions."""
         return self.REQUIRED_PATTERNS
 
-    def get_antipatterns(self) -> List[Tuple[str, str]]:
+    def get_antipatterns(self) -> list[tuple[str, str]]:
         """Get list of antipatterns as (regex, message) tuples."""
         return self.ANTIPATTERNS
 
-    def analyze_ast(self, tree: ast.AST, file_path: Path) -> List[Violation]:
+    def analyze_ast(self, tree: ast.AST, file_path: Path) -> list[Violation]:
         """AST-based analysis for sophisticated pattern detection."""
         violations = []
 
@@ -159,24 +155,32 @@ class PythonPatterns:
                 if self._is_test_file() and node.decorator_list:
                     for decorator in node.decorator_list:
                         mock_target = None
-                        
+
                         if isinstance(decorator, ast.Call):
                             if isinstance(decorator.func, ast.Name):
                                 # @patch('target')
                                 if decorator.func.id in ["patch", "mock_patch"]:
-                                    if decorator.args and isinstance(decorator.args[0], ast.Constant):
+                                    if decorator.args and isinstance(
+                                        decorator.args[0], ast.Constant
+                                    ):
                                         mock_target = decorator.args[0].value
                             elif isinstance(decorator.func, ast.Attribute):
                                 # @mock.patch('target') or @patch.object(...)
-                                if (isinstance(decorator.func.value, ast.Name) and 
-                                    decorator.func.value.id in ["mock", "unittest"] and 
-                                    decorator.func.attr in ["patch", "patch.object"]):
-                                    if decorator.args and isinstance(decorator.args[0], ast.Constant):
+                                if (
+                                    isinstance(decorator.func.value, ast.Name)
+                                    and decorator.func.value.id in ["mock", "unittest"]
+                                    and decorator.func.attr in ["patch", "patch.object"]
+                                ):
+                                    if decorator.args and isinstance(
+                                        decorator.args[0], ast.Constant
+                                    ):
                                         mock_target = decorator.args[0].value
-                        
+
                         if mock_target:
-                            self._check_mock_violation(mock_target, decorator.lineno, "decorator")
-                
+                            self._check_mock_violation(
+                                mock_target, decorator.lineno, "decorator"
+                            )
+
                 # Check for type hints on functions (Rudy's requirement)
                 if not node.returns and not node.name.startswith("_"):
                     self.violations.append(
@@ -211,21 +215,7 @@ class PythonPatterns:
                         )
                     )
 
-                # Check for mutable defaults (more sophisticated than regex)
-                for arg in node.args.defaults:
-                    if isinstance(arg, (ast.List, ast.Dict, ast.Set)):
-                        self.violations.append(
-                            Violation(
-                                str(self.file_path),
-                                node.lineno,
-                                "mutable_default",
-                                f"Mutable default argument in function '{node.name}'",
-                                "Use None default, check inside function (classic Python gotcha)",
-                                "error",
-                                ast_node=node,
-                                function_name=node.name,
-                            )
-                        )
+                # NOTE: Mutable defaults detection removed - ruff B006 handles this
 
                 self.generic_visit(node)
 
@@ -409,127 +399,16 @@ class PythonPatterns:
                 self.generic_visit(node)
 
             def visit_ImportFrom(self, node) -> None:
-                """Check banned imports and old typing imports."""
+                """Check banned imports."""
+                # NOTE: Old typing imports detection removed - ruff UP006-UP010 handle this
                 if node.module:
                     self._check_banned_import(node.module, node.lineno)
-
-                    # Check for old typing imports (from typing import List, Dict, etc.)
-                    if node.module == "typing":
-                        builtin_replacements = {
-                            "List": "list",
-                            "Dict": "dict",
-                            "Set": "set",
-                            "Tuple": "tuple",
-                            "FrozenSet": "frozenset",
-                            "Deque": "collections.deque",
-                            "DefaultDict": "collections.defaultdict",
-                            "OrderedDict": "collections.OrderedDict",
-                            "Counter": "collections.Counter",
-                            "ChainMap": "collections.ChainMap",
-                        }
-
-                        union_replacements = {
-                            "Union": "Use | union syntax (Python 3.10+)",
-                            "Optional": "Use | None syntax (Python 3.10+)",
-                        }
-
-                        for alias in node.names:
-                            if alias.name in builtin_replacements:
-                                replacement = builtin_replacements[alias.name]
-                                self.violations.append(
-                                    Violation(
-                                        str(self.file_path),
-                                        node.lineno,
-                                        "old_type_hints",
-                                        "Use modern type hints in Python 3.9+",
-                                        f"Replace typing.{alias.name} with {replacement}",
-                                        "warning",
-                                        ast_node=node,
-                                        language_context={
-                                            "pattern": "old_typing_import",
-                                            "old_type": f"typing.{alias.name}",
-                                            "new_type": replacement,
-                                        },
-                                    )
-                                )
-                            elif alias.name in union_replacements:
-                                suggestion = union_replacements[alias.name]
-                                self.violations.append(
-                                    Violation(
-                                        str(self.file_path),
-                                        node.lineno,
-                                        "old_type_hints",
-                                        "Use modern type hints in Python 3.10+",
-                                        suggestion,
-                                        "warning",
-                                        ast_node=node,
-                                        language_context={
-                                            "pattern": "old_typing_import",
-                                            "old_type": f"typing.{alias.name}",
-                                            "new_type": suggestion,
-                                        },
-                                    )
-                                )
 
                 self.generic_visit(node)
 
             def visit_BinOp(self, node) -> None:
-                """Detect string % formatting and potential SQL injection."""
-                # Check if this is a % operation on a string constant
-                if (
-                    isinstance(node.op, ast.Mod)
-                    and isinstance(node.left, ast.Constant)
-                    and isinstance(node.left.value, str)
-                    and "%" in node.left.value
-                ):
-                    # Check for SQL injection in % formatting
-                    sql_keywords = [
-                        "SELECT",
-                        "INSERT",
-                        "UPDATE",
-                        "DELETE",
-                        "FROM",
-                        "WHERE",
-                        "JOIN",
-                    ]
-                    if any(
-                        keyword in node.left.value.upper() for keyword in sql_keywords
-                    ):
-                        self.violations.append(
-                            Violation(
-                                str(self.file_path),
-                                node.lineno,
-                                "security_violation",
-                                "Potential SQL injection in % formatting - use parameterized queries",
-                                "Use cursor.execute(query, params) with placeholders instead of % formatting",
-                                "error",
-                                ast_node=node,
-                                language_context={
-                                    "pattern": "sql_injection_percent",
-                                    "format_string": node.left.value[:100],
-                                },
-                            )
-                        )
-                    else:
-                        # Regular % formatting violation
-                        self.violations.append(
-                            Violation(
-                                str(self.file_path),
-                                node.lineno,
-                                "old_string_formatting",
-                                "Use f-strings instead of % formatting (modern Python)",
-                                'Replace with f-string: f"text {variable}"',
-                                "error",
-                                ast_node=node,
-                                language_context={
-                                    "pattern": "string_percent_formatting",
-                                    "format_string": node.left.value[:50] + "..."
-                                    if len(node.left.value) > 50
-                                    else node.left.value,
-                                },
-                            )
-                        )
-
+                """Detect operations."""
+                # NOTE: % formatting and SQL injection detection removed - ruff UP031, S608 handle this
                 self.generic_visit(node)
 
             def visit_Call(self, node) -> None:
@@ -538,39 +417,8 @@ class PythonPatterns:
                     func_name = node.func.id
 
                     # Security violations - critical accuracy needed
-                    if func_name == "eval":
-                        self.violations.append(
-                            Violation(
-                                str(self.file_path),
-                                node.lineno,
-                                "security_violation",
-                                "Never use eval() - consider ast.literal_eval() for safe evaluation",
-                                "Replace with ast.literal_eval() or refactor logic",
-                                "error",
-                                ast_node=node,
-                                language_context={
-                                    "pattern": "eval_usage",
-                                    "function": "eval",
-                                },
-                            )
-                        )
-                    elif func_name == "exec":
-                        self.violations.append(
-                            Violation(
-                                str(self.file_path),
-                                node.lineno,
-                                "security_violation",
-                                "Never use exec() - refactor to avoid dynamic code execution",
-                                "Refactor to use explicit logic instead of dynamic execution",
-                                "error",
-                                ast_node=node,
-                                language_context={
-                                    "pattern": "exec_usage",
-                                    "function": "exec",
-                                },
-                            )
-                        )
-                    elif func_name == "compile" and len(node.args) >= 2:
+                    # NOTE: eval/exec detection removed - ruff S307, S102 handle this
+                    if func_name == "compile" and len(node.args) >= 2:
                         # Check if compile() is being used to execute code
                         self.violations.append(
                             Violation(
@@ -587,35 +435,16 @@ class PythonPatterns:
                                 },
                             )
                         )
-                    
+
                     # Mock constructor detection (Mock(), MagicMock(), etc.)
                     elif func_name in self.patterns.MOCK_PATTERNS["constructors"]:
                         if self._is_test_file():
                             # In test files, block all mock constructors in strict mode
-                            self._check_mock_violation(func_name, node.lineno, "constructor")
+                            self._check_mock_violation(
+                                func_name, node.lineno, "constructor"
+                            )
 
-                # Check for pickle module usage (security risk)
-                elif (
-                    isinstance(node.func, ast.Attribute)
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "pickle"
-                    and node.func.attr in ("loads", "load", "dumps", "dump")
-                ):
-                    self.violations.append(
-                        Violation(
-                            str(self.file_path),
-                            node.lineno,
-                            "security_violation",
-                            f"pickle.{node.func.attr}() can execute arbitrary code - use json/msgpack instead",
-                            "Use json.loads() for simple data or msgpack for binary serialization",
-                            "error",
-                            ast_node=node,
-                            language_context={
-                                "pattern": "pickle_usage",
-                                "method": f"pickle.{node.func.attr}",
-                            },
-                        )
-                    )
+                # NOTE: pickle detection removed - ruff S301 handles this
 
                 # Check for subprocess with shell=True
                 elif (
@@ -665,61 +494,7 @@ class PythonPatterns:
                             )
                         )
 
-                # Check for .format() method calls and SQL injection
-                elif (
-                    isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "format"
-                    and isinstance(node.func.value, ast.Constant)
-                    and isinstance(node.func.value.value, str)
-                ):
-                    # Check for SQL injection in .format()
-                    sql_keywords = [
-                        "SELECT",
-                        "INSERT",
-                        "UPDATE",
-                        "DELETE",
-                        "FROM",
-                        "WHERE",
-                        "JOIN",
-                    ]
-                    if any(
-                        keyword in node.func.value.value.upper()
-                        for keyword in sql_keywords
-                    ):
-                        self.violations.append(
-                            Violation(
-                                str(self.file_path),
-                                node.lineno,
-                                "security_violation",
-                                "Potential SQL injection in .format() - use parameterized queries",
-                                "Use cursor.execute(query, params) with placeholders instead of .format()",
-                                "error",
-                                ast_node=node,
-                                language_context={
-                                    "pattern": "sql_injection_format",
-                                    "format_string": node.func.value.value[:100],
-                                },
-                            )
-                        )
-                    else:
-                        # Regular .format() violation
-                        self.violations.append(
-                            Violation(
-                                str(self.file_path),
-                                node.lineno,
-                                "old_string_formatting",
-                                "Use f-strings instead of .format() (faster, more readable)",
-                                'Replace with f-string: f"text {variable}"',
-                                "error",
-                                ast_node=node,
-                                language_context={
-                                    "pattern": "format_method",
-                                    "format_string": node.func.value.value[:50] + "..."
-                                    if len(node.func.value.value) > 50
-                                    else node.func.value.value,
-                                },
-                            )
-                        )
+                # NOTE: .format() detection removed - ruff UP032, S608 handle this
 
                 # Check for path traversal vulnerabilities in os.path calls
                 elif (
@@ -924,68 +699,11 @@ class PythonPatterns:
                 self.generic_visit(node)
 
             def visit_Attribute(self, node) -> None:
-                """Detect old-style imports and path handling patterns."""
-                # Check for old typing module usage (Python 3.9+ has built-in generics)
-                if isinstance(node.value, ast.Name) and node.value.id == "typing":
-                    # Python 3.9+ built-in replacements
-                    builtin_replacements = {
-                        "List": "list",
-                        "Dict": "dict",
-                        "Set": "set",
-                        "Tuple": "tuple",
-                        "FrozenSet": "frozenset",
-                        "Deque": "collections.deque",
-                        "DefaultDict": "collections.defaultdict",
-                        "OrderedDict": "collections.OrderedDict",
-                        "Counter": "collections.Counter",
-                        "ChainMap": "collections.ChainMap",
-                    }
-
-                    # Python 3.10+ union syntax
-                    union_replacements = {
-                        "Union": "Use | union syntax (Python 3.10+)",
-                        "Optional": "Use | None syntax (Python 3.10+)",
-                    }
-
-                    # Contextlib replacements
-                    contextlib_replacements = {
-                        "ContextManager": "Use contextlib.AbstractContextManager",
-                        "AsyncContextManager": "Use contextlib.AbstractAsyncContextManager",
-                    }
-
-                    replacement = None
-                    suggestion = None
-
-                    if node.attr in builtin_replacements:
-                        replacement = builtin_replacements[node.attr]
-                        suggestion = f"Replace typing.{node.attr} with {replacement}"
-                    elif node.attr in union_replacements:
-                        replacement = union_replacements[node.attr]
-                        suggestion = replacement
-                    elif node.attr in contextlib_replacements:
-                        replacement = contextlib_replacements[node.attr]
-                        suggestion = f"Replace typing.{node.attr} with {replacement}"
-
-                    if replacement and suggestion:
-                        self.violations.append(
-                            Violation(
-                                str(self.file_path),
-                                node.lineno,
-                                "old_type_hints",
-                                "Use modern type hints in Python 3.9+",
-                                suggestion,
-                                "warning",
-                                ast_node=node,
-                                language_context={
-                                    "pattern": "old_typing",
-                                    "old_type": f"typing.{node.attr}",
-                                    "new_type": replacement,
-                                },
-                            )
-                        )
+                """Detect path handling patterns."""
+                # NOTE: Old typing module detection removed - ruff UP006-UP010 handle this
 
                 # Check for os.path usage
-                elif (
+                if (
                     isinstance(node.value, ast.Attribute)
                     and isinstance(node.value.value, ast.Name)
                     and node.value.value.id == "os"
@@ -1083,35 +801,37 @@ class PythonPatterns:
                         },
                     )
                 )
-            
-            
+
             def _is_test_file(self) -> bool:
                 """Check if current file is a test file."""
                 file_str = str(self.file_path).lower()
                 file_name = self.file_path.name.lower()
-                
+
                 # Check file name patterns
                 if file_name.startswith("test_") or file_name.endswith("_test.py"):
                     return True
-                
+
                 # Check if in test directory
                 if "/tests/" in file_str or "/test/" in file_str:
                     return True
-                    
+
                 return False
-            
-            def _check_mock_violation(self, mock_target: str, line_num: int, mock_type: str):
+
+            def _check_mock_violation(
+                self, mock_target: str, line_num: int, mock_type: str
+            ):
                 """Check if a mock target is allowed or should be blocked."""
                 # Check for inline escape hatch comment
                 if self._has_escape_hatch(line_num):
                     return
-                
+
                 # Check against allowed patterns from config
                 for pattern in self.patterns.ALLOWED_MOCK_PATTERNS:
                     import fnmatch
+
                     if fnmatch.fnmatch(mock_target, pattern):
                         return
-                
+
                 # In strict mode, everything else is blocked
                 self.violations.append(
                     Violation(
@@ -1128,13 +848,13 @@ class PythonPatterns:
                         },
                     )
                 )
-            
+
             def _has_escape_hatch(self, line_num: int) -> bool:
                 """Check if line has an escape hatch comment."""
                 # This would need access to the actual file lines
                 # For now, return False - can be enhanced later
                 return False
-            
+
             def _get_mock_fix_suggestion(self, mock_target: str, mock_type: str) -> str:
                 """Generate helpful fix suggestion for mock violations."""
                 return (
@@ -1156,8 +876,8 @@ class PythonPatterns:
         return violations
 
     def analyze_patterns(
-        self, lines: List[str], file_path: Path, reporter=None
-    ) -> List[Violation]:
+        self, lines: list[str], file_path: Path, reporter=None
+    ) -> list[Violation]:
         """Pattern-based analysis for specific standards."""
         violations = []
         has_print_usage = False
@@ -1226,7 +946,7 @@ class PythonPatterns:
 
         return violations
 
-    def analyze_imports(self, content: str, file_path: Path) -> List[Violation]:
+    def analyze_imports(self, content: str, file_path: Path) -> list[Violation]:
         """Import analysis for banned libraries and missing preferred imports."""
         violations = []
 
@@ -1263,8 +983,8 @@ class PythonPatterns:
         return violations
 
     def analyze_development_patterns(
-        self, content: str, lines: List[str], file_path: Path
-    ) -> List[Violation]:
+        self, content: str, lines: list[str], file_path: Path
+    ) -> list[Violation]:
         """Enforce development workflow patterns."""
         violations = []
 

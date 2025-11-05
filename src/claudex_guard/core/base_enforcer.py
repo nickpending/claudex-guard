@@ -18,11 +18,11 @@ class BaseEnforcer(ABC):
     # Extension to enforcer mapping (module_path, class_name)
     EXTENSION_MAP = {
         ".py": ("claudex_guard.enforcers.python", "PythonEnforcer"),
-        # Future language support will be added here:
-        # '.ts': ('claudex_guard.enforcers.typescript', 'TypeScriptEnforcer'),
-        # '.js': ('claudex_guard.enforcers.typescript', 'TypeScriptEnforcer'),
-        # '.tsx': ('claudex_guard.enforcers.typescript', 'TypeScriptEnforcer'),
-        # '.jsx': ('claudex_guard.enforcers.typescript', 'TypeScriptEnforcer'),
+        ".ts": ("claudex_guard.enforcers.typescript", "TypeScriptEnforcer"),
+        ".tsx": ("claudex_guard.enforcers.typescript", "TypeScriptEnforcer"),
+        ".js": ("claudex_guard.enforcers.typescript", "TypeScriptEnforcer"),
+        ".jsx": ("claudex_guard.enforcers.typescript", "TypeScriptEnforcer"),
+        # Future language support:
         # '.rs': ('claudex_guard.enforcers.rust', 'RustEnforcer'),
         # '.go': ('claudex_guard.enforcers.go', 'GoEnforcer'),
     }

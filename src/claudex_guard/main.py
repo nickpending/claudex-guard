@@ -7,8 +7,8 @@ Main entry point that routes to different modes:
 - pre: PreToolUse context injection
 """
 
-import sys
 import argparse
+import sys
 
 
 def main() -> int:
@@ -24,7 +24,10 @@ def main() -> int:
         "--mode",
         default="post",
         choices=["post", "pre"],
-        help="Mode: 'post' for violation detection (default), 'pre' for context injection",
+        help=(
+            "Mode: 'post' for violation detection (default), "
+            "'pre' for context injection"
+        ),
     )
 
     parser.add_argument(
@@ -56,16 +59,23 @@ def main() -> int:
             print(f"Error: PreToolUse execution failed: {e}", file=sys.stderr)
             return 1
     else:
-        # PostToolUse enforcement (default)
+        # PostToolUse enforcement (default) - multi-language via factory
         try:
-            from .enforcers.python import main as python_main
+            from .core.base_enforcer import BaseEnforcer
 
-            return python_main()
+            # Extract file path from hook context
+            file_path = BaseEnforcer.get_file_path_from_hook_context()
+
+            if not file_path:
+                return 0  # No file to analyze - skip gracefully
+
+            # Use factory to route to appropriate enforcer
+            return BaseEnforcer.run_for_file(file_path)
         except ImportError as e:
-            print(f"Error: Python enforcer not available: {e}", file=sys.stderr)
+            print(f"Error: Enforcer not available: {e}", file=sys.stderr)
             return 1
         except Exception as e:
-            print(f"Error: Python enforcer execution failed: {e}", file=sys.stderr)
+            print(f"Error: Enforcer execution failed: {e}", file=sys.stderr)
             return 1
 
 

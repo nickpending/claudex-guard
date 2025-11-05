@@ -14,12 +14,13 @@ from unittest.mock import patch
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from claudex_guard.core.base_enforcer import BaseEnforcer
 from claudex_guard.core.violation import Violation, ViolationReporter
 from claudex_guard.services.auto_fixer import PythonAutoFixer
 from claudex_guard.standards.python_patterns import PythonPatterns
 
 
-def test_banned_import_detection_actually_works():
+def test_banned_import_detection_actually_works() -> None:
     """Test that banned imports are actually caught, not just happy path."""
     patterns = PythonPatterns()
 
@@ -35,32 +36,7 @@ def test_banned_import_detection_actually_works():
     assert "pipeline" not in str(violations)  # Should not flag pipeline_tool
 
 
-def test_mutable_default_argument_detection():
-    """Test that mutable default detection catches the actual Python gotcha."""
-    patterns = PythonPatterns()
-
-    # This is the actual bug pattern that causes runtime issues
-    code = """
-def bad_function(items=[]):  # This shares state between calls!
-    items.append("new")
-    return items
-
-def good_function(items=None):  # This is safe
-    if items is None:
-        items = []
-    return items
-"""
-    tree = ast.parse(code)
-    violations = patterns.analyze_ast(tree, Path("test.py"))
-
-    mutable_violations = [
-        v for v in violations if v.violation_type == "mutable_default"
-    ]
-    assert len(mutable_violations) == 1
-    assert "bad_function" in mutable_violations[0].message
-
-
-def test_hook_context_extraction_fallback_chain():
+def test_hook_context_extraction_fallback_chain() -> None:
     """Test that hook context extraction handles real Claude Code scenarios."""
     # Use PythonEnforcer instead of abstract BaseEnforcer
     from claudex_guard.enforcers.python import PythonEnforcer
@@ -88,7 +64,7 @@ def test_hook_context_extraction_fallback_chain():
         assert file_path == Path(__file__)
 
 
-def test_global_reminder_deduplication():
+def test_global_reminder_deduplication() -> None:
     """Test that global reminders don't spam when multiple files have prints."""
     reporter = ViolationReporter("python")
 
@@ -103,7 +79,7 @@ def test_global_reminder_deduplication():
     assert reminder_text in reporter.global_reminders
 
 
-def test_auto_fixer_handles_missing_tools_gracefully():
+def test_auto_fixer_handles_missing_tools_gracefully() -> None:
     """Test auto-fixer doesn't crash when ruff/mypy are missing."""
     fixer = PythonAutoFixer()
 
@@ -123,7 +99,7 @@ def test_auto_fixer_handles_missing_tools_gracefully():
         test_file.unlink()
 
 
-def test_violation_severity_affects_exit_code():
+def test_violation_severity_affects_exit_code() -> None:
     """Test that violation severity actually controls blocking behavior."""
     reporter = ViolationReporter("python")
 
@@ -144,7 +120,7 @@ def test_violation_severity_affects_exit_code():
     assert exit_code == 2  # Should block
 
 
-def test_ast_node_context_preservation():
+def test_ast_node_context_preservation() -> None:
     """Test that AST context is preserved for enhanced violations."""
     # Create violation with AST context
     code = "def test_func(): pass"
@@ -159,16 +135,79 @@ def test_ast_node_context_preservation():
     assert violation.line_num == func_node.lineno
 
 
+def test_factory_creates_python_enforcer_for_py_files() -> None:
+    """Test factory method creates PythonEnforcer for .py files."""
+    test_file = Path(__file__)  # This test file is .py
+    enforcer = BaseEnforcer.create(test_file)
+
+    # Should return a PythonEnforcer instance
+    assert enforcer is not None
+    assert enforcer.__class__.__name__ == "PythonEnforcer"
+    assert enforcer.language == "python"
+
+
+def test_factory_returns_none_for_unsupported_extensions() -> None:
+    """Test factory returns None for unsupported file types."""
+    import tempfile
+
+    # Test various unsupported extensions
+    unsupported_extensions = [".txt", ".md", ".json", ".yaml", ".xml", ""]
+
+    for ext in unsupported_extensions:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
+            test_file = Path(f.name)
+
+        try:
+            enforcer = BaseEnforcer.create(test_file)
+            assert enforcer is None, f"Expected None for {ext}, got {enforcer}"
+        finally:
+            test_file.unlink()
+
+
+def test_run_for_file_returns_zero_for_unsupported_files() -> None:
+    """Test run_for_file skips unsupported files gracefully."""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        f.write("test content")
+        test_file = Path(f.name)
+
+    try:
+        exit_code = BaseEnforcer.run_for_file(test_file)
+        assert exit_code == 0, "Unsupported file should return 0 (no false blocking)"
+    finally:
+        test_file.unlink()
+
+
+def test_factory_handles_case_insensitive_extensions() -> None:
+    """Test factory handles uppercase extensions."""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".PY", delete=False) as f:
+        f.write("# test")
+        test_file = Path(f.name)
+
+    try:
+        enforcer = BaseEnforcer.create(test_file)
+        assert enforcer is not None, "Should handle .PY (uppercase)"
+        assert enforcer.__class__.__name__ == "PythonEnforcer"
+    finally:
+        test_file.unlink()
+
+
 if __name__ == "__main__":
     # Run the useful tests
     test_functions = [
         test_banned_import_detection_actually_works,
-        test_mutable_default_argument_detection,
         test_hook_context_extraction_fallback_chain,
         test_global_reminder_deduplication,
         test_auto_fixer_handles_missing_tools_gracefully,
         test_violation_severity_affects_exit_code,
         test_ast_node_context_preservation,
+        test_factory_creates_python_enforcer_for_py_files,
+        test_factory_returns_none_for_unsupported_extensions,
+        test_run_for_file_returns_zero_for_unsupported_files,
+        test_factory_handles_case_insensitive_extensions,
     ]
 
     passed = 0

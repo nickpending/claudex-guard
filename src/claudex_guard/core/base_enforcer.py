@@ -133,7 +133,7 @@ class BaseEnforcer(ABC):
         pass
 
     def run(self) -> int:
-        """Main entry point for enforcer execution."""
+        """Main entry point for enforcer execution with iterative fixing."""
         try:
             file_path = BaseEnforcer.get_file_path_from_hook_context()
 
@@ -147,15 +147,42 @@ class BaseEnforcer(ABC):
             if workflow_context.project_root:
                 self.reporter.set_project_root(workflow_context.project_root)
 
-            # Apply automatic fixes first
-            fixes = self.apply_automatic_fixes(file_path)
-            for fix in fixes:
-                self.reporter.add_fix(fix)
+            # Load configuration for iteration settings
+            from .config import Config
 
-            # Analyze for violations
-            violations = self.analyze_file(file_path)
-            for violation in violations:
-                self.reporter.add_violation(violation)
+            config = Config(workflow_context.project_root)
+
+            # Iterative fixing loop: fix → analyze → compare → repeat
+            previous_error_count = float("inf")
+
+            for _ in range(config.max_iterations):
+                # Apply automatic fixes
+                fixes = self.apply_automatic_fixes(file_path)
+                for fix in fixes:
+                    self.reporter.add_fix(fix)
+
+                # Analyze for violations
+                violations = self.analyze_file(file_path)
+
+                # Clear previous violations - only final violations matter
+                self.reporter.violations.clear()
+
+                for violation in violations:
+                    self.reporter.add_violation(violation)
+
+                # Count error-level violations only (warnings don't block)
+                current_error_count = sum(
+                    1 for v in violations if v.severity == "error"
+                )
+
+                # Convergence check: stop if no errors or no improvement
+                if current_error_count == 0:
+                    break  # Success - all errors fixed
+
+                if current_error_count >= previous_error_count:
+                    break  # No improvement - stop iterating
+
+                previous_error_count = current_error_count
 
             # Report results
             return self.reporter.report()

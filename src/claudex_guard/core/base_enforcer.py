@@ -22,8 +22,8 @@ class BaseEnforcer(ABC):
         ".tsx": ("claudex_guard.enforcers.typescript", "TypeScriptEnforcer"),
         ".js": ("claudex_guard.enforcers.typescript", "TypeScriptEnforcer"),
         ".jsx": ("claudex_guard.enforcers.typescript", "TypeScriptEnforcer"),
+        ".rs": ("claudex_guard.enforcers.rust", "RustEnforcer"),
         # Future language support:
-        # '.rs': ('claudex_guard.enforcers.rust', 'RustEnforcer'),
         # '.go': ('claudex_guard.enforcers.go', 'GoEnforcer'),
     }
 

@@ -23,8 +23,7 @@ class BaseEnforcer(ABC):
         ".js": ("claudex_guard.enforcers.typescript", "TypeScriptEnforcer"),
         ".jsx": ("claudex_guard.enforcers.typescript", "TypeScriptEnforcer"),
         ".rs": ("claudex_guard.enforcers.rust", "RustEnforcer"),
-        # Future language support:
-        # '.go': ('claudex_guard.enforcers.go', 'GoEnforcer'),
+        ".go": ("claudex_guard.enforcers.go", "GoEnforcer"),
     }
 
     def __init__(self, language: str):

@@ -48,6 +48,46 @@ class PythonEnforcer(BaseEnforcer):
         """Apply automatic fixes via ruff/mypy integration."""
         return self.auto_fixer.apply_fixes(file_path)
 
+    def _run_ruff_analysis(self, file_path: Path) -> List[Violation]:
+        """Run ruff check for security and quality violations (S, B, UP rules)."""
+        import subprocess
+        import json
+
+        violations = []
+        try:
+            result = subprocess.run(
+                [
+                    "ruff",
+                    "check",
+                    str(file_path),
+                    "--select=S,B,UP",  # Security, bugs, upgrades
+                    "--output-format=json",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.stdout:
+                ruff_violations = json.loads(result.stdout)
+                for rv in ruff_violations:
+                    violations.append(
+                        Violation(
+                            str(file_path),
+                            rv.get("location", {}).get("row", 0),
+                            rv.get("code", "ruff"),
+                            rv.get("message", "Ruff violation"),
+                            rv.get("fix", {}).get("message", "")
+                            if rv.get("fix")
+                            else "",
+                            "error",
+                        )
+                    )
+        except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
+            pass  # Ruff not available or failed - graceful degradation
+
+        return violations
+
     def analyze_file(self, file_path: Path) -> List[Violation]:
         """Analyze Python file using AST and pattern detection."""
         violations = []
@@ -173,6 +213,9 @@ class PythonEnforcer(BaseEnforcer):
             violations.extend(
                 self.patterns.analyze_development_patterns(content, lines, file_path)
             )
+
+            # Ruff security and quality checks (S, B, UP rules)
+            violations.extend(self._run_ruff_analysis(file_path))
 
         except Exception as e:
             # Don't break workflow on analysis failure

@@ -44,6 +44,12 @@ class RustPatterns:
                     "--message-format=json",
                     "--",
                     "-Dwarnings",
+                    "-Wclippy::unwrap_used",  # Detect .unwrap() abuse
+                    "-Wclippy::expect_used",  # Detect .expect() abuse
+                    "-Wclippy::panic",  # Detect panic!() usage
+                    "-Wclippy::todo",  # Detect TODO markers
+                    "-Wclippy::unimplemented",  # Detect unimplemented!()
+                    "-Wclippy::unreachable",  # Detect unreachable!()
                 ],
                 capture_output=True,
                 text=True,

@@ -61,6 +61,7 @@ class PythonAutoFixer:
                     "check",
                     "--fix",
                     str(file_path),
+                    "--select=S,B,UP,E,F,W",  # Security, bugs, upgrades, errors
                     "--ignore=F401",  # Don't remove unused imports (LLM still working)
                     "--ignore=I001",  # Don't sort imports (LLM still adding them)
                     "--ignore=I002",  # Don't enforce import conventions yet

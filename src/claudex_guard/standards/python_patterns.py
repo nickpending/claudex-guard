@@ -534,67 +534,6 @@ class PythonPatterns:
                 # Reuse FunctionDef logic for async functions
                 self.visit_FunctionDef(node)
 
-            def visit_JoinedStr(self, node) -> None:
-                """Detect potential SQL injection in f-strings."""
-                # Check for SQL keywords in f-string content
-                sql_keywords = [
-                    "SELECT",
-                    "INSERT",
-                    "UPDATE",
-                    "DELETE",
-                    "FROM",
-                    "WHERE",
-                    "JOIN",
-                ]
-
-                # Get the f-string content
-                f_string_parts = []
-                for value in node.values:
-                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                        f_string_parts.append(value.value.upper())
-
-                f_string_content = " ".join(f_string_parts)
-
-                # Check if this looks like SQL with user input
-                # Must have SQL keywords AND look like actual query structure
-                looks_like_sql = any(
-                    keyword in f_string_content for keyword in sql_keywords
-                )
-                has_variables = len(node.values) > 1
-
-                # More specific SQL pattern detection - must look like actual SQL
-                sql_patterns = [
-                    "SELECT * FROM",
-                    "INSERT INTO",
-                    "UPDATE SET",
-                    "DELETE FROM",
-                    "WHERE",
-                    "VALUES",
-                ]
-                looks_like_actual_sql = any(
-                    pattern in f_string_content for pattern in sql_patterns
-                )
-
-                if looks_like_sql and has_variables and looks_like_actual_sql:
-                    # Has both SQL keywords and variables (potential injection)
-                    self.violations.append(
-                        Violation(
-                            str(self.file_path),
-                            node.lineno,
-                            "security_violation",
-                            "Potential SQL injection in f-string - use parameterized queries",
-                            "Use cursor.execute(query, params) with placeholders instead of f-strings",
-                            "error",
-                            ast_node=node,
-                            language_context={
-                                "pattern": "sql_injection_fstring",
-                                "sql_content": f_string_content[:100],
-                            },
-                        )
-                    )
-
-                self.generic_visit(node)
-
             def visit_Compare(self, node) -> None:
                 """Detect identity comparison gotchas."""
                 # Check for 'is' comparison with non-singleton values

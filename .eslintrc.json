@@ -1,0 +1,31 @@
+{
+  "env": {
+    "node": true,
+    "es2021": true,
+    "browser": true
+  },
+  "plugins": ["security", "@microsoft/sdl"],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-eval": "error",
+    "no-implied-eval": "error",
+    "no-new-func": "error",
+    "security/detect-non-literal-fs-filename": "error",
+    "security/detect-child-process": "error",
+    "security/detect-non-literal-regexp": "warn",
+    "security/detect-unsafe-regex": "error",
+    "security/detect-buffer-noassert": "error",
+    "security/detect-object-injection": "warn",
+    "@microsoft/sdl/no-inner-html": "error",
+    "@microsoft/sdl/no-html-method": "error",
+    "@microsoft/sdl/no-document-write": "error",
+    "@microsoft/sdl/no-insecure-url": "error",
+    "@microsoft/sdl/no-postmessage-star-origin": "error",
+    "@microsoft/sdl/react-iframe-missing-sandbox": "error",
+    "@microsoft/sdl/no-angular-bypass-sanitizer": "error",
+    "@microsoft/sdl/no-angularjs-bypass-sce": "error"
+  }
+}

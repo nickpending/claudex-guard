@@ -2,17 +2,16 @@
 
 import subprocess
 from pathlib import Path
-from typing import List
 
 
 class PythonAutoFixer:
     """Automatically fixes issues that don't require human decision-making."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the auto-fixer."""
-        self.fixes_applied: List[str] = []
+        self.fixes_applied: list[str] = []
 
-    def apply_fixes(self, file_path: Path) -> List[str]:
+    def apply_fixes(self, file_path: Path) -> list[str]:
         """Apply safe automatic fixes and return list of changes made."""
         self.fixes_applied = []
 
@@ -51,20 +50,17 @@ class PythonAutoFixer:
         return False
 
     def _run_ruff_check_fix(self, file_path: Path) -> bool:
-        """Run ruff linting with automatic fixes (development mode - preserve imports)."""
+        """Run ruff linting with automatic fixes (strict enforcement mode)."""
         try:
-            # During development, skip import-related fixes to avoid LLM timing conflicts
-            # Full import cleanup happens later during /complete-task
+            # Strict enforcement - no development mode compromises
             result = subprocess.run(
                 [
                     "ruff",
                     "check",
                     "--fix",
                     str(file_path),
-                    "--select=S,B,UP,E,F,W",  # Security, bugs, upgrades, errors
-                    "--ignore=F401",  # Don't remove unused imports (LLM still working)
-                    "--ignore=I001",  # Don't sort imports (LLM still adding them)
-                    "--ignore=I002",  # Don't enforce import conventions yet
+                    # Security, bugs, upgrades, errors, imports
+                    "--select=S,B,UP,E,F,W,I",
                 ],
                 capture_output=True,
                 text=True,
@@ -73,7 +69,7 @@ class PythonAutoFixer:
 
             if result.returncode == 0:
                 self.fixes_applied.append(
-                    "Applied development auto-fixes (imports preserved)"
+                    "Applied strict security enforcement + automatic fixes"
                 )
                 return True
             elif result.stderr:
@@ -84,7 +80,7 @@ class PythonAutoFixer:
             pass
         return False
 
-    def _run_mypy_check(self, file_path: Path) -> List[str]:
+    def _run_mypy_check(self, file_path: Path) -> list[str]:
         """Check types with mypy (preferred type checker)."""
         try:
             result = subprocess.run(

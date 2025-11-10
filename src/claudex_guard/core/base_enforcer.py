@@ -183,6 +183,14 @@ class BaseEnforcer(ABC):
 
                 previous_error_count = current_error_count
 
+            # Show success output for model visibility
+            if not self.reporter.has_errors() and self.reporter.fixes_applied:
+                import sys
+
+                print("✓ Quality checks passed:", file=sys.stderr)
+                for fix in self.reporter.fixes_applied:
+                    print(f"  • {fix}", file=sys.stderr)
+
             # Report results
             return self.reporter.report()
 

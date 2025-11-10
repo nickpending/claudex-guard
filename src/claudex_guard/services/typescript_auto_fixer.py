@@ -51,8 +51,19 @@ class TypeScriptAutoFixer:
             True if fixes were applied successfully
         """
         try:
+            # Use bundled security-focused ESLint config
+            config_path = Path(__file__).parent.parent.parent.parent / ".eslintrc.json"
             result = subprocess.run(
-                ["npx", "eslint", "--fix", str(file_path)],
+                [
+                    "npx",
+                    "eslint",
+                    "--fix",
+                    "--config",
+                    str(config_path),
+                    "--resolve-plugins-relative-to",
+                    str(config_path.parent),
+                    str(file_path),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -60,7 +71,9 @@ class TypeScriptAutoFixer:
             # ESLint returns 0 if no violations, 1 if violations found
             # --fix modifies file in place, so check if it ran successfully
             if result.returncode in {0, 1}:
-                self.fixes_applied.append("Applied ESLint automatic fixes")
+                self.fixes_applied.append(
+                    "Applied ESLint security enforcement + automatic fixes"
+                )
                 return True
         except subprocess.TimeoutExpired:
             self.fixes_applied.append("ESLint fix timed out (skipped)")

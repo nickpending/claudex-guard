@@ -1,0 +1,11 @@
+{
+  "name": "claudex-guard-eslint-config",
+  "version": "1.0.0",
+  "description": "ESLint security plugins for claudex-guard TypeScript/JavaScript analysis",
+  "private": true,
+  "dependencies": {
+    "eslint": "^8.57.0",
+    "eslint-plugin-security": "^3.0.1",
+    "@microsoft/eslint-plugin-sdl": "^0.2.2"
+  }
+}

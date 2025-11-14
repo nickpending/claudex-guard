@@ -71,6 +71,10 @@ class PythonEnforcer(BaseEnforcer):
             if result.stdout:
                 ruff_violations = json.loads(result.stdout)
                 for rv in ruff_violations:
+                    # Skip syntax errors - let other tools handle them
+                    if "SyntaxError" in rv.get("message", ""):
+                        continue
+
                     violations.append(
                         Violation(
                             str(file_path),

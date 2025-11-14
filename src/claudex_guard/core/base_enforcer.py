@@ -57,11 +57,12 @@ class BaseEnforcer(ABC):
             return None
 
     @staticmethod
-    def run_for_file(file_path: Path) -> int:
+    def run_for_file(file_path: Path, hook_mode: bool = False) -> int:
         """Convenience method: create enforcer and run analysis.
 
         Args:
             file_path: Path to file to analyze
+            hook_mode: True if running via Claude Code hook (enables JSON output)
 
         Returns:
             Exit code: 0 (success), 1 (error), 2 (violations found)
@@ -69,7 +70,7 @@ class BaseEnforcer(ABC):
         enforcer = BaseEnforcer.create(file_path)
         if not enforcer:
             return 0  # Unsupported file type - skip gracefully (no false blocking)
-        return enforcer.run()
+        return enforcer.run(file_path, hook_mode=hook_mode)
 
     @abstractmethod
     def analyze_file(self, file_path: Path) -> list[Violation]:
@@ -84,7 +85,15 @@ class BaseEnforcer(ABC):
     @staticmethod
     def get_file_path_from_hook_context() -> Optional[Path]:
         """Extract file path from Claude Code hook context."""
+        import tempfile
+
         try:
+            # Debug: Log stdin data to temp file
+            stdin_data = sys.stdin.read()
+            debug_file = Path(tempfile.gettempdir()) / "claudex-guard-debug.json"
+            debug_file.write_text(f"ENV CLAUDE_FILE_PATHS: {os.environ.get('CLAUDE_FILE_PATHS', 'NOT_SET')}\n")
+            debug_file.write_text(debug_file.read_text() + f"STDIN: {stdin_data}\n", )
+
             # Method 1: Claude Code env var (preferred - simple and reliable)
             claude_file_paths = os.environ.get("CLAUDE_FILE_PATHS", "")
             if claude_file_paths:
@@ -93,7 +102,6 @@ class BaseEnforcer(ABC):
                     return file_path
 
             # Method 2: JSON stdin (fallback for compatibility)
-            stdin_data = sys.stdin.read()
             if stdin_data.strip():
                 hook_data = json.loads(stdin_data)
                 # Try tool_input first (primary Claude Code format)
@@ -119,7 +127,10 @@ class BaseEnforcer(ABC):
 
             return None
 
-        except Exception:
+        except Exception as e:
+            # Log exception
+            debug_file = Path(tempfile.gettempdir()) / "claudex-guard-debug.json"
+            debug_file.write_text(debug_file.read_text() + f"EXCEPTION: {e}\n")
             return None
 
     def should_analyze_file(self, file_path: Path) -> bool:
@@ -131,10 +142,19 @@ class BaseEnforcer(ABC):
         """Check if file type is supported by this enforcer."""
         pass
 
-    def run(self) -> int:
-        """Main entry point for enforcer execution with iterative fixing."""
+    def run(self, file_path: Optional[Path] = None, hook_mode: bool = False) -> int:
+        """Main entry point for enforcer execution with iterative fixing.
+
+        Args:
+            file_path: Optional file path. If not provided, extracts from hook context.
+            hook_mode: True if running via Claude Code hook (enables JSON output).
+        """
         try:
-            file_path = BaseEnforcer.get_file_path_from_hook_context()
+            # Use provided file_path or extract from hook context
+            if file_path is None:
+                file_path = BaseEnforcer.get_file_path_from_hook_context()
+                # If extracted from hook context, we're in hook mode
+                hook_mode = True
 
             if not file_path or not self.should_analyze_file(file_path):
                 return 0
@@ -146,6 +166,10 @@ class BaseEnforcer(ABC):
             if workflow_context.project_root:
                 self.reporter.set_project_root(workflow_context.project_root)
 
+            # Enable hook mode for JSON output format
+            if hook_mode:
+                self.reporter.set_hook_mode(True)
+
             # Load configuration for iteration settings
             from .config import Config
 
@@ -155,6 +179,10 @@ class BaseEnforcer(ABC):
             previous_error_count = float("inf")
 
             for _ in range(config.max_iterations):
+                # Clear previous state - only final iteration matters
+                self.reporter.violations.clear()
+                self.reporter.fixes_applied.clear()
+
                 # Apply automatic fixes
                 fixes = self.apply_automatic_fixes(file_path)
                 for fix in fixes:
@@ -162,10 +190,6 @@ class BaseEnforcer(ABC):
 
                 # Analyze for violations
                 violations = self.analyze_file(file_path)
-
-                # Clear previous violations - only final violations matter
-                self.reporter.violations.clear()
-
                 for violation in violations:
                     self.reporter.add_violation(violation)
 
@@ -183,15 +207,7 @@ class BaseEnforcer(ABC):
 
                 previous_error_count = current_error_count
 
-            # Show success output for model visibility
-            if not self.reporter.has_errors() and self.reporter.fixes_applied:
-                import sys
-
-                print("✓ Quality checks passed:", file=sys.stderr)
-                for fix in self.reporter.fixes_applied:
-                    print(f"  • {fix}", file=sys.stderr)
-
-            # Report results
+            # Report results (handles success output internally)
             return self.reporter.report()
 
         except (OSError, ValueError, TypeError, ImportError) as e:

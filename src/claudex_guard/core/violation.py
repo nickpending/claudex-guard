@@ -2,7 +2,7 @@
 
 import ast
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 class Violation:
@@ -19,7 +19,7 @@ class Violation:
         # Language-specific optional fields
         ast_node: Optional[ast.AST] = None,
         function_name: Optional[str] = None,
-        language_context: Optional[Dict[str, Any]] = None,
+        language_context: Optional[dict[str, Any]] = None,
     ):
         self.file_path = file_path
         self.line_num = line_num
@@ -67,15 +67,20 @@ class ViolationReporter:
     def __init__(self, language: str):
         self.language = language
         self.project_root: Optional[Path] = None
-        self.violations: List[Violation] = []
-        self.fixes_applied: List[str] = []
+        self.violations: list[Violation] = []
+        self.fixes_applied: list[str] = []
         self.context_message: Optional[str] = None
         self.global_reminders: set[str] = set()
         self.memory = None  # Will be initialized when first violation is added
+        self.hook_mode = False  # True when running as Claude Code hook
 
     def set_project_root(self, project_root: Optional[Path]) -> None:
         """Set the project root for memory system."""
         self.project_root = project_root
+
+    def set_hook_mode(self, enabled: bool = True) -> None:
+        """Enable hook mode for JSON output format."""
+        self.hook_mode = enabled
 
     def add_violation(self, violation: Violation) -> None:
         """Add a violation to the report and log to memory."""
@@ -116,14 +121,46 @@ class ViolationReporter:
 
     def report(self) -> int:
         """Report violations via JSON decision control for Claude. Returns exit code."""
+        import json
         import sys
 
-        # Only report errors via JSON decision control
+        # Hook mode: always output JSON format
+        if self.hook_mode:
+            if self.violations and self.has_errors():
+                # Build detailed violation message
+                error_violations = [v for v in self.violations if v.severity == "error"]
+                violation_details = []
+
+                for v in error_violations:
+                    detail = f"• {Path(v.file_path).name}:{v.line_num} - {v.message}"
+                    if v.fix_suggestion:
+                        detail += f"\n  Fix: {v.fix_suggestion}"
+                    violation_details.append(detail)
+
+                reason = (
+                    f"Quality violations found ({len(error_violations)} errors):\n"
+                    + "\n".join(violation_details)
+                )
+
+                decision = {"decision": "block", "reason": reason}
+                print(json.dumps(decision), file=sys.stderr)
+                return 2  # Block operation
+            else:
+                # Success in hook mode - output JSON approve decision
+                if self.fixes_applied:
+                    reason = "Quality checks passed with auto-fixes:\n" + "\n".join(
+                        f"• {fix}" for fix in self.fixes_applied
+                    )
+                else:
+                    reason = "Quality checks passed - no issues found"
+
+                decision = {"decision": "approve", "reason": reason}
+                print(json.dumps(decision))
+                return 0  # Success
+
+        # Non-hook mode: only report errors via JSON, success via human-readable
         if self.violations and self.has_errors():
             # Claude Code decision control - block Claude from proceeding
-            import json
-            from pathlib import Path
-
             # Build detailed violation message for Claude
             error_violations = [v for v in self.violations if v.severity == "error"]
             violation_details = []
@@ -141,8 +178,16 @@ class ViolationReporter:
             )
 
             decision = {"decision": "block", "reason": reason}
-            print(json.dumps(decision))  # stdout for Claude decision control
+            print(
+                json.dumps(decision), file=sys.stderr
+            )  # stderr for Claude decision control
 
             return 2  # Block operation
+
+        # Success - output applied fixes for model visibility (stdout - model sees this)
+        if self.fixes_applied:
+            print("✓ Quality checks passed:")
+            for fix in self.fixes_applied:
+                print(f"  • {fix}")
 
         return 0  # Success

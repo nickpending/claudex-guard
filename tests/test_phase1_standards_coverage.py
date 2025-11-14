@@ -2,6 +2,7 @@
 
 import ast
 from pathlib import Path
+import pytest
 
 from claudex_guard.standards.python_patterns import PythonPatterns
 
@@ -38,6 +39,7 @@ def test_expanded_banned_imports() -> None:
             assert False, f"Failed to detect banned import: {expected_banned}"
 
 
+@pytest.mark.skip(reason="ruff UP035 handles deprecated typing imports (commit 18326ac)")
 def test_modern_type_hints_comprehensive() -> None:
     """Test comprehensive Python 3.9+ type hints enforcement."""
     patterns = PythonPatterns()
@@ -193,6 +195,7 @@ else:
         assert False, "Failed to detect match/case opportunity"
 
 
+@pytest.mark.skip(reason="Tests old_type_hints - ruff UP035 handles this (commit 18326ac)")
 def test_comprehensive_phase1_coverage() -> None:
     """Test comprehensive real-world code with Phase 1 patterns."""
     patterns = PythonPatterns()

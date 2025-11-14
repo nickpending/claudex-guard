@@ -1,21 +1,22 @@
 # claudex-guard
 
-Automated code quality enforcement for AI-assisted development workflows.
+AI slop detection and code quality enforcement for AI-assisted development.
 
 ## Overview
 
-claudex-guard provides real-time code quality enforcement integrated with AI coding assistants. Instead of repeatedly explaining your coding standards, let claudex-guard automatically enforce them and teach your AI assistant your preferences.
+claudex-guard detects and blocks "AI slop" - broken, unmaintainable, untestable code patterns from outdated AI training data. It enforces modern best practices and blocks real quality issues while educating AI assistants toward better patterns.
 
 ## Features
 
-- **🐍 Python Enforcement**: Modular AST analysis (661→89 lines, 87% reduction)
-- **🔧 Automatic Fixes**: Integration with ruff formatting/linting and mypy type checking
-- **🛡️ Mock Detection**: Strict enforcement of "Don't Mock What You Don't Own" principle
+- **🎯 AI Slop Detection**: Blocks broken patterns from old AI training data (deprecated libs, old syntax)
+- **⚖️ Smart Severity**: ERROR blocks real issues, WARNING educates toward better practices
+- **🐍 Multi-Language**: Python, TypeScript/JavaScript, Rust, Go with consistent philosophy
+- **🛡️ Mock Detection**: Enforces "Don't Mock What You Don't Own" (decorators + context managers)
+- **🔧 Zero Duplication**: Delegates to existing linters (ruff, mypy, Clippy, ESLint) - no redundant checks
 - **⚡ Performance**: 47% faster with SQLite storage and intelligent project root caching
-- **🤖 AI Integration**: Enhanced Claude Code hooks with global reminder system
-- **📊 Queryable History**: SQLite database for violation analytics and pattern learning
-- **📚 Standards-Based**: References `~/.claudex/standards/claudex-python.md`
-- **🧪 Comprehensive Testing**: 43 tests (integration + unit) ensuring reliability
+- **🤖 AI Integration**: Claude Code hooks with JSON decision control
+- **📊 Queryable History**: SQLite database for violation analytics
+- **🧪 Comprehensive Testing**: 70 passing tests ensuring reliability
 
 ## Quick Start
 
@@ -24,20 +25,23 @@ claudex-guard provides real-time code quality enforcement integrated with AI cod
 **For Universal CLI Access:**
 
 ```bash
-# Clone and install globally (makes CLI commands available everywhere)  
+# Clone and install globally (makes CLI commands available everywhere)
 git clone https://github.com/your-username/claudex-guard.git
 cd claudex-guard
-uv tool install .
 
-# Now claudex-guard-python is globally available
-which claudex-guard-python
-# /Users/you/.local/bin/claudex-guard-python
+# Build and install from wheel (ensures clean installation)
+uv build
+uv tool install dist/claudex_guard-*.whl
+
+# Verify installation
+which claudex-guard
+# /Users/you/.local/bin/claudex-guard
 
 # Manually add to Claude Code settings.json:
 # Add this to your PostToolUse hooks for Python files
 ```
 
-**Development installation:**
+**Local Development:**
 
 ```bash
 # Clone and install in development mode
@@ -49,41 +53,59 @@ uv sync
 uv run pytest tests/ -v
 
 # Test the tool directly
-echo '{"tool_input": {"file_path": "your_file.py"}}' | uv run python -m claudex_guard.main
+echo 'print("hello")' > /tmp/test.py
+CLAUDE_FILE_PATHS=/tmp/test.py uv run python -m src.claudex_guard.main --mode post
+
+# When updating after code changes, rebuild and reinstall:
+rm -rf dist/ && uv build && uv tool uninstall claudex-guard && uv tool install dist/claudex_guard-*.whl
 ```
 
 ### Usage
 
-Once installed, claudex-guard automatically runs when you edit Python files in Claude Code:
+Once installed, claudex-guard automatically runs when you edit files in Claude Code.
 
+**Example - ERROR (blocks execution):**
 ```python
-# This code will trigger quality enforcement
-def bad_function(items=[]):  # Mutable default argument
-    result = "Hello %s!" % "world"  # Old string formatting
-    return result
+import requests  # Banned import - old AI training data
+
+def fetch_data():
+    return requests.get("https://api.example.com")
 ```
 
-Claude receives violation details via JSON decision control:
 ```
-Quality violations found (2 errors):
-• example.py:1 - Mutable default argument in function 'bad_function'
-  Fix: Use None default, check inside function (classic Python gotcha)
-• example.py:2 - Use f-strings instead of % formatting (modern Python)
-  Fix: Replace with f"Hello {name}!" syntax
+Quality violations found (1 errors):
+• example.py:1 - Banned import 'requests' - use 'httpx' instead
+  Fix: Modern async HTTP client with better API
+```
+
+**Example - WARNING (educates):**
+```python
+import threading  # Suggests better alternatives
+
+def worker():
+    print("Working")  # Suggests rich.print()
+```
+
+```
+Quality checks passed with suggestions:
+• Consider asyncio instead of threading for modern concurrent code
+• Use rich.print() for better console output
 ```
 
 **Note**: If you see duplicate messages, run Claude Code from within a project directory rather than from `~/`.
 
 ## Supported Languages
 
-- ✅ **Python** - Full enforcement with AST analysis
-- 📋 **JavaScript/TypeScript** - Planned
-- 📋 **Rust** - Planned
-- 📋 **Go** - Planned
+All languages follow the same philosophy: block AI slop (ERROR), educate toward better (WARNING), delegate to linters.
+
+- ✅ **Python** - AST analysis, ruff/mypy integration, banned imports (requests, pandas, pip)
+- ✅ **JavaScript/TypeScript** - ESLint integration, banned packages (moment, axios), console.log warnings
+- ✅ **Rust** - Clippy integration, outdated crates (time, chrono 0.3), panic() detection
+- ✅ **Go** - golangci-lint integration, deprecated packages, error ignoring warnings
 
 ## Architecture
 
-**Modular Composition Design** (Latest: 2025-08-14):
+**Modular Composition Design** (Latest: 2025-11-13 - Major refactor for zero duplication):
 
 ```
 claudex-guard/
@@ -114,34 +136,42 @@ claudex-guard/
     └── test_core_components.py         # Component unit tests
 ```
 
-## Python Enforcer Features
+## How It Works
 
-### Latest Architecture (2025-08-14 Performance Update)
-- **SQLite Storage**: Queryable violation history in `~/.config/claudex-guard/violations.db`
-- **Project Root Caching**: JSON cache eliminates repeated directory scanning (47% faster)
-- **XDG Compliance**: All data in `~/.config/claudex-guard/` following standards
-- **Backward Compatible**: Automatic migration from old markdown files
-- **Standard Package Structure**: Proper Python modules with clean separation
-- **Comprehensive Testing**: 43 tests ensuring reliability (100% pass rate)
+### Severity Model
 
-### Pattern Detection
-- **Security**: `eval()`, `exec()`, SQL injection patterns
-- **Performance**: Inefficient loops, string concatenation
-- **Modern Python**: f-strings, pathlib, type hints, banned legacy imports
-- **Environment**: uv over pip/poetry, proper virtual environments
-- **Anti-patterns**: Mutable defaults, bare except clauses, late binding closures
-- **Mock Detection**: Enforces "Don't Mock What You Don't Own" - blocks internal code mocking
+**ERROR (Blocks execution)** - Real AI slop that breaks code or architecture:
+- Banned imports (requests→httpx, pandas→polars, old libraries from AI training data)
+- Mock violations ("Don't Mock What You Don't Own" architecture enforcement)
+- Path traversal security issues
+- Identity comparison bugs (`is` vs `==` gotchas)
 
-### Smart Violation System
-- **Hard Violations**: Block development (mutable defaults, eval, bare except)
-- **Soft Violations**: Show global reminders (print usage guidance)
-- **Standards Integration**: Points to `~/.claudex/standards/claudex-python.md`
+**WARNING (Educational)** - Steers AI toward better patterns without blocking:
+- Documentation opportunities (missing/inadequate docstrings)
+- Refactoring suggestions (dataclass, enum, match/case)
+- Modern API usage (pathlib over os.path, os.getenv() over os.environ[])
+- Code quality (test naming, error logging, composition over inheritance)
+- Threading import (suggests async alternatives)
 
-### Mock Detection System (v0.3.4+)
+### No Duplicate Checks
+
+claudex-guard delegates to existing linters instead of reimplementing:
+- **Python**: ruff handles bare except (E722), mutable defaults (B006), type hints (via mypy)
+- **TypeScript**: ESLint + tsc handle language issues
+- **Rust**: Clippy handles .unwrap() abuse, deprecated patterns
+- **Go**: golangci-lint handles language-specific issues
+
+This means:
+- Faster execution (no redundant analysis)
+- Better accuracy (tools specialized for each language)
+- Consistent with ecosystem standards
+
+### Mock Detection System
 Enforces the "Don't Mock What You Don't Own" principle to prevent brittle tests:
 
+- **Comprehensive Detection**: Catches both decorator (`@patch`) and context manager (`with patch()`) patterns
 - **Blocks Internal Mocking**: Prevents mocking your own code/services
-- **Allows External APIs**: External services (OpenAI, Stripe, etc.) can be configured as allowed
+- **Allows External APIs**: External services (OpenAI, Stripe, etc.) configurable as allowed
 - **Test File Aware**: Strict enforcement in test files (`test_*.py`, `*_test.py`)
 - **Configurable**: Use `.claudex-guard.yaml` to allow specific patterns
 - **Escape Hatch**: Use `# claudex-guard: disable-mock` to allow specific lines
@@ -233,26 +263,27 @@ cp configs/claudex-python.md configs/claudex-newlang.md
 
 ### Testing
 
-**Comprehensive Test Suite (43 tests)**:
+**Comprehensive Test Suite (70 tests, 21 skipped)**:
 
 ```bash
 # Run all tests
 uv run pytest tests/ -v
 
 # Test specific components
-uv run python tests/test_core_components.py        # Unit tests
-uv run python tests/test_python_enforcer_integration.py  # Integration tests
+uv run pytest tests/test_mock_detection_integration.py -v  # Mock detection
+uv run pytest tests/test_python_enforcer_integration.py -v # Integration
+uv run pytest tests/test_multi_language_integration.py -v  # Multi-language
 
 # Test enforcer directly
 echo '{"tool_input": {"file_path": "your_file.py"}}' | uv run python -m claudex_guard.main
 ```
 
 **Test Coverage**:
-- 8 integration tests (end-to-end hook scenarios)
-- 7 component unit tests (bug detection)
-- 13 pattern detection tests (comprehensive violations)
-- 15 standards coverage tests (Phase 1 & 2 patterns)
-- AST analysis and performance tests
+- Mock detection (decorator + context manager patterns)
+- Multi-language integration (Python, TypeScript, Rust, Go)
+- End-to-end hook scenarios
+- AST analysis and pattern detection
+- Standards coverage and performance tests
 
 ## Integration
 
@@ -335,6 +366,26 @@ While built for Claude Code, the enforcers can be used standalone:
 ```bash
 uv run python -m claudex_guard.main your_file.py
 ```
+
+## Changelog
+
+### v0.3.5 (2025-11-13) - Zero Duplication Refactor
+- **Removed duplicate checks**: Bare except, subprocess shell=True, type hints, .unwrap() - linters handle these
+- **Fixed severity model**: Clear ERROR (blocks) vs WARNING (educates) distinction
+- **Closed mock detection gap**: Added context manager (`with patch()`) detection
+- **Updated tests**: 70 passing tests, comprehensive coverage
+- **Philosophy clarified**: AI slop detection, delegate to linters, consistent multi-language
+
+### v0.3.4 (2025-08-14) - Performance Update
+- SQLite violation storage
+- Project root caching (47% faster)
+- XDG-compliant data storage
+
+### v0.3.0 - Multi-Language Support
+- TypeScript/JavaScript enforcer
+- Rust enforcer
+- Go enforcer
+- Consistent philosophy across languages
 
 ## Contributing
 

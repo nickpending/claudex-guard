@@ -2,10 +2,12 @@
 
 import ast
 from pathlib import Path
+import pytest
 
 from claudex_guard.standards.python_patterns import PythonPatterns
 
 
+@pytest.mark.skip(reason="Tests removed patterns (% formatting, eval, pickle) - now handled by ruff (commit 18326ac)")
 def test_comprehensive_ast_detection() -> None:
     """Test all AST-migrated patterns work correctly."""
     patterns = PythonPatterns()

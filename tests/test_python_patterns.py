@@ -43,18 +43,11 @@ class TestPythonPatterns:
             isinstance(pattern, tuple) and len(pattern) == 2 for pattern in antipatterns
         )
 
-        # Check for key antipatterns
+        # Check for antipatterns
+        # NOTE: Mutable defaults (B006) and bare except (E722) removed - ruff handles them
         pattern_messages = [msg for _, msg in antipatterns]
-        assert any("Mutable default argument" in msg for msg in pattern_messages)
-        assert any("Bare except clause" in msg for msg in pattern_messages)
-        # f-string detection moved to AST analysis - check for any formatting message
-        assert (
-            any(
-                "formatting" in msg.lower() or "string" in msg.lower()
-                for msg in pattern_messages
-            )
-            or True
-        )  # f-strings handled in AST
+        # Verify antipatterns have meaningful messages
+        assert all(len(msg) > 0 for msg in pattern_messages)
 
     # NOTE: Type hints and mutable defaults tests removed - ruff handles these
 

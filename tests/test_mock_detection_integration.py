@@ -10,12 +10,11 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Tuple
 
 import yaml
 
 
-def run_enforcer(file_path: Path) -> Tuple[int, str, str]:
+def run_enforcer(file_path: Path) -> tuple[int, str, str]:
     """Run claudex-guard on a file and return exit code, stdout, stderr."""
     result = subprocess.run(
         ["uv", "run", "python", "-m", "claudex_guard.enforcers.python", str(file_path)],
@@ -29,7 +28,7 @@ def run_enforcer(file_path: Path) -> Tuple[int, str, str]:
 def test_mock_detection_blocks_violations_in_test_files():
     """Test that mock violations are detected and blocked in real test files."""
     # Create a test file with mock violations
-    with tempfile.NamedTemporaryFile(mode='w', suffix='_test.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix="_test.py", delete=False) as f:
         f.write("""
 from unittest.mock import patch, Mock
 
@@ -49,8 +48,8 @@ def test_with_violations(mock_db, mock_requests):
         # Should block with exit code 2 (violations found)
         assert exit_code == 2, f"Expected exit code 2, got {exit_code}"
 
-        # Parse JSON output
-        output = json.loads(stdout)
+        # Parse JSON output (violations go to stderr, not stdout)
+        output = json.loads(stderr)
         assert output["decision"] == "block"
 
         # Check for specific mock violations in the reason
@@ -84,13 +83,10 @@ def test_mock_detection_respects_config_file():
         config_data = {
             "mock_detection": {
                 "enabled": True,
-                "allowed_patterns": [
-                    "requests.*",
-                    "stripe.*"
-                ]
+                "allowed_patterns": ["requests.*", "stripe.*"],
             }
         }
-        with open(config_file, 'w') as f:
+        with open(config_file, "w") as f:
             yaml.dump(config_data, f)
 
         # Create test file with mock violations
@@ -111,7 +107,7 @@ def test_with_config(mock_db, mock_stripe, mock_requests):
         # All mocks will be blocked in strict mode without config
         assert exit_code == 2
 
-        output = json.loads(stdout)
+        output = json.loads(stderr)
         reason = output["reason"]
 
         # All three should be blocked without config
@@ -123,7 +119,7 @@ def test_with_config(mock_db, mock_stripe, mock_requests):
 def test_non_test_files_no_mock_detection():
     """Test that mock detection doesn't trigger in non-test files."""
     # Create a regular Python file (not a test file)
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write("""
 from unittest.mock import Mock, patch
 
@@ -144,7 +140,7 @@ def setup_mock():
 
         # Should not find mock violations (might find other violations)
         if exit_code == 2:
-            output = json.loads(stdout)
+            output = json.loads(stderr)
             reason = output["reason"]
             # Should not contain mock violations
             assert "MOCKING VIOLATION" not in reason
@@ -156,7 +152,7 @@ def setup_mock():
 def test_mock_detection_with_real_hook_data():
     """Test mock detection with simulated PostToolUse hook data."""
     # Create a test file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='_test.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix="_test.py", delete=False) as f:
         f.write("""
 from unittest.mock import MagicMock
 
@@ -169,12 +165,7 @@ def test_something():
 
     try:
         # Simulate hook data from Claude Code
-        hook_data = {
-            "tool_name": "Edit",
-            "tool_input": {
-                "file_path": str(test_file)
-            }
-        }
+        hook_data = {"tool_name": "Edit", "tool_input": {"file_path": str(test_file)}}
 
         # Run with stdin input (simulating PostToolUse hook)
         stdin_input = json.dumps(hook_data)
@@ -188,7 +179,7 @@ def test_something():
 
         # Should detect violation
         assert result.returncode == 2
-        output = json.loads(result.stdout)
+        output = json.loads(result.stderr)
         assert output["decision"] == "block"
         assert "Mocking 'MagicMock' detected" in output["reason"]
 
@@ -199,7 +190,7 @@ def test_something():
 def test_mock_detection_violation_logging():
     """Test that mock violations are logged to violation history."""
     # Create test file with violations
-    with tempfile.NamedTemporaryFile(mode='w', suffix='_test.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix="_test.py", delete=False) as f:
         f.write("""
 from unittest.mock import patch
 
@@ -215,7 +206,7 @@ def test_logging():
 
         # Check that violations were detected
         assert exit_code == 2
-        output = json.loads(stdout)
+        output = json.loads(stderr)
 
         # Verify mock violation is in output
         assert "app.service.process" in output["reason"]
@@ -229,7 +220,7 @@ def test_logging():
 
 def test_multiple_decorators_detection():
     """Test detection of multiple mock decorators on single function."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='_test.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix="_test.py", delete=False) as f:
         f.write("""
 from unittest.mock import patch
 
@@ -245,7 +236,7 @@ def test_multiple(mock_c, mock_b, mock_a):
         exit_code, stdout, stderr = run_enforcer(test_file)
 
         assert exit_code == 2
-        output = json.loads(stdout)
+        output = json.loads(stderr)
         reason = output["reason"]
 
         # Should detect all three mocks

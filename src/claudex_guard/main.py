@@ -70,7 +70,8 @@ def main() -> int:
                 return 0  # No file to analyze - skip gracefully
 
             # Use factory to route to appropriate enforcer
-            return BaseEnforcer.run_for_file(file_path)
+            # hook_mode=True enables JSON output for Claude Code integration
+            return BaseEnforcer.run_for_file(file_path, hook_mode=True)
         except ImportError as e:
             print(f"Error: Enforcer not available: {e}", file=sys.stderr)
             return 1

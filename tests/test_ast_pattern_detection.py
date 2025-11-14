@@ -2,10 +2,12 @@
 
 import ast
 from pathlib import Path
+import pytest
 
 from claudex_guard.standards.python_patterns import PythonPatterns
 
 
+@pytest.mark.skip(reason="ruff UP031/UP032 handles this (commit 18326ac)")
 def test_ast_string_formatting_detection():
     """Test AST detection of string % formatting vs legitimate % usage."""
     patterns = PythonPatterns()
@@ -66,6 +68,7 @@ def test_ast_string_formatting_detection():
             continue
 
 
+@pytest.mark.skip(reason="ruff UP031/UP032 handles this (commit 18326ac)")
 def test_real_world_false_positive_cases():
     """Test specific cases that caused false positives in real projects."""
     patterns = PythonPatterns()

@@ -74,35 +74,15 @@ class PythonPatterns:
         self._load_mock_config()
 
         # Anti-patterns that violate coding standards
+        # NOTE: Mutable defaults removed - ruff B006 handles this
+        # NOTE: Bare except removed - ruff E722 handles this
+        # NOTE: Threading warning kept as educational (not in ruff default rules)
         self.ANTIPATTERNS = [
-            # Classic Python gotchas
-            (
-                r"def\s+\w+\([^)]*=\s*\[\]",
-                "Mutable default argument (classic Python gotcha)",
-            ),
-            (
-                r"def\s+\w+\([^)]*=\s*\{\}",
-                "Mutable default argument (classic Python gotcha)",
-            ),
-            # Error handling violations
-            (r"except\s*:", "Bare except clause (violates error handling standards)"),
-            # NOTE: String formatting detection moved to AST analysis for accuracy
-            # - % formatting: visit_BinOp()
-            # - .format(): visit_Call()
-            # NOTE: Path handling moved to AST analysis (visit_Attribute) for accuracy
-            # NOTE: Late binding closure detection removed - regex too unreliable (false positives)
-            #       If needed in future, implement proper AST-based detection in visit_Lambda
-            # NOTE: Security violations moved to AST analysis (visit_Call) for accuracy
-            # Environment management violations (moved to shell context)
-            # NOTE: Shell command patterns belong in bash-guard, not Python code analysis
-            # NOTE: python/pytest command patterns moved to bash-guard (shell context, not Python code)
-            # Threading gotchas
+            # Threading gotchas (educational warning)
             (
                 r"import\s+threading",
                 "Threading only helps with I/O - use multiprocessing for CPU tasks",
             ),
-            # NOTE: Debug patterns moved to AST analysis (visit_Call) for accuracy
-            # NOTE: Type hints moved to AST analysis (visit_Attribute) for accuracy
         ]
 
     def _load_mock_config(self):
@@ -124,7 +104,7 @@ class PythonPatterns:
                         mock_config = config["mock_detection"]
                         if "allowed_patterns" in mock_config:
                             self.ALLOWED_MOCK_PATTERNS = mock_config["allowed_patterns"]
-            except Exception:
+            except Exception:  # noqa: S110
                 # Silently continue with defaults if config fails
                 pass
 
@@ -181,20 +161,7 @@ class PythonPatterns:
                                 mock_target, decorator.lineno, "decorator"
                             )
 
-                # Check for type hints on functions (Rudy's requirement)
-                if not node.returns and not node.name.startswith("_"):
-                    self.violations.append(
-                        Violation(
-                            str(self.file_path),
-                            node.lineno,
-                            "missing_type_hints",
-                            f"Function '{node.name}' missing return type hint",
-                            "Add -> return_type annotation (type hints required everywhere)",
-                            "error",
-                            ast_node=node,
-                            function_name=node.name,
-                        )
-                    )
+                # NOTE: Type hints check removed - mypy handles with disallow_untyped_defs
 
                 # Check for missing docstrings on public functions
                 if not ast.get_docstring(node) and not node.name.startswith("_"):
@@ -223,6 +190,42 @@ class PythonPatterns:
                 # Sophisticated import analysis
                 for alias in node.names:
                     self._check_banned_import(alias.name, node.lineno)
+                self.generic_visit(node)
+
+            def visit_With(self, node) -> None:
+                """Detect mock context managers in test files."""
+                if self._is_test_file():
+                    for item in node.items:
+                        mock_target = None
+
+                        # Check if context_expr is a patch call
+                        if isinstance(item.context_expr, ast.Call):
+                            if isinstance(item.context_expr.func, ast.Name):
+                                # with patch('target') as mock:
+                                if item.context_expr.func.id in ["patch", "mock_patch"]:
+                                    if item.context_expr.args and isinstance(
+                                        item.context_expr.args[0], ast.Constant
+                                    ):
+                                        mock_target = item.context_expr.args[0].value
+                            elif isinstance(item.context_expr.func, ast.Attribute):
+                                # with mock.patch('target') as mock:
+                                if (
+                                    isinstance(item.context_expr.func.value, ast.Name)
+                                    and item.context_expr.func.value.id
+                                    in ["mock", "unittest"]
+                                    and item.context_expr.func.attr
+                                    in ["patch", "patch.object"]
+                                ):
+                                    if item.context_expr.args and isinstance(
+                                        item.context_expr.args[0], ast.Constant
+                                    ):
+                                        mock_target = item.context_expr.args[0].value
+
+                        if mock_target:
+                            self._check_mock_violation(
+                                mock_target, node.lineno, "context_manager"
+                            )
+
                 self.generic_visit(node)
 
             def visit_ClassDef(self, node) -> None:
@@ -445,37 +448,9 @@ class PythonPatterns:
                             )
 
                 # NOTE: pickle detection removed - ruff S301 handles this
+                # NOTE: subprocess shell=True removed - ruff S602 handles this
 
-                # Check for subprocess with shell=True
-                elif (
-                    isinstance(node.func, ast.Attribute)
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "subprocess"
-                ):
-                    # Check for shell=True in keyword arguments
-                    for keyword in node.keywords:
-                        if (
-                            keyword.arg == "shell"
-                            and isinstance(keyword.value, ast.Constant)
-                            and keyword.value.value is True
-                        ):
-                            self.violations.append(
-                                Violation(
-                                    str(self.file_path),
-                                    node.lineno,
-                                    "security_violation",
-                                    "subprocess with shell=True can enable shell injection attacks",
-                                    "Use shell=False and pass arguments as list to prevent injection",
-                                    "error",
-                                    ast_node=node,
-                                    language_context={
-                                        "pattern": "subprocess_shell_injection",
-                                        "method": f"subprocess.{node.func.attr}",
-                                    },
-                                )
-                            )
-
-                elif isinstance(node.func, ast.Name):
+                if isinstance(node.func, ast.Name):
                     func_name = node.func.id
                     if func_name == "print":
                         self.violations.append(
@@ -857,7 +832,7 @@ class PythonPatterns:
                                 )
                             )
 
-            # Check anti-patterns
+            # Check anti-patterns (educational warnings)
             for pattern, message in self.ANTIPATTERNS:
                 if re.search(pattern, line):
                     # Special handling for print detection - use global reminder
@@ -872,7 +847,7 @@ class PythonPatterns:
                             "antipattern",
                             message,
                             "",
-                            "error",
+                            "warning",  # Educational, not blocking
                             language_context={"pattern": pattern, "line": line.strip()},
                         )
                     )

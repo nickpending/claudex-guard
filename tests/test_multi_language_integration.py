@@ -159,13 +159,13 @@ def test_typescript_routing_and_violation_detection() -> None:
         # Graceful degradation: ESLint/tsc missing is OK
         assert exit_code in (0, 2)
         if exit_code == 2:
-            assert '"decision": "block"' in stdout
+            assert '"decision": "block"' in stderr
             # Should detect console.log or moment import or any type
             violations_present = (
-                "console" in stdout.lower()
-                or "moment" in stdout.lower()
-                or "any" in stdout.lower()
-                or "eslint" in stdout.lower()
+                "console" in stderr.lower()
+                or "moment" in stderr.lower()
+                or "any" in stderr.lower()
+                or "eslint" in stderr.lower()
             )
             assert violations_present, "Expected TypeScript-specific violations"
     finally:
@@ -207,12 +207,12 @@ def test_rust_routing_and_violation_detection() -> None:
         # Should detect violations (graceful degradation if Clippy missing)
         assert exit_code in (0, 2)
         if exit_code == 2:
-            assert '"decision": "block"' in stdout
+            assert '"decision": "block"' in stderr
             # Should detect unwrap or time crate or clippy missing
             violations_present = (
-                "unwrap" in stdout.lower()
-                or "time" in stdout.lower()
-                or "clippy" in stdout.lower()
+                "unwrap" in stderr.lower()
+                or "time" in stderr.lower()
+                or "clippy" in stderr.lower()
             )
             assert violations_present, "Expected Rust-specific violations"
     finally:

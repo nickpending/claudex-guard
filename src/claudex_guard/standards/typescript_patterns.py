@@ -38,7 +38,7 @@ class TypeScriptPatterns:
         violations: list[Violation] = []
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603, S607
                 ["npx", "eslint", "--format", "json", str(file_path)],
                 capture_output=True,
                 text=True,
@@ -108,7 +108,7 @@ class TypeScriptPatterns:
         violations: list[Violation] = []
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603, S607
                 ["tsc", "--noEmit", str(file_path)],
                 capture_output=True,
                 text=True,
@@ -228,7 +228,7 @@ class TypeScriptPatterns:
                         fix_suggestion=(
                             "Use proper logging library (e.g., winston, pino)"
                         ),
-                        severity="error",
+                        severity="warning",
                         language_context={"line_content": line.strip()},
                     )
                 )

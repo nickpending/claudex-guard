@@ -171,36 +171,4 @@ class RustPatterns:
 
         return violations
 
-    def check_unwrap_usage(self, lines: list[str], file_path: Path) -> list[Violation]:
-        """Check for .unwrap() abuse (AI error handling laziness).
-
-        Args:
-            lines: File content as list of lines
-            file_path: Path to file being analyzed
-
-        Returns:
-            List of Violation objects for .unwrap() usage
-        """
-        violations: list[Violation] = []
-
-        # Match .unwrap() but not .unwrap_or() or .unwrap_or_else()
-        unwrap_pattern = re.compile(r"\.unwrap\(\)(?!\w)")
-
-        for line_num, line in enumerate(lines, start=1):
-            if unwrap_pattern.search(line):
-                violations.append(
-                    Violation(
-                        file_path=str(file_path),
-                        line_num=line_num,
-                        violation_type="unwrap_abuse",
-                        message=".unwrap() detected (AI error handling laziness)",
-                        fix_suggestion=(
-                            "Use ? operator, .unwrap_or(), .unwrap_or_else(), "
-                            "or proper error handling with match/if let"
-                        ),
-                        severity="error",
-                        language_context={"line_content": line.strip()},
-                    )
-                )
-
-        return violations
+    # NOTE: check_unwrap_usage() removed - Clippy unwrap_used handles this

@@ -2,6 +2,7 @@
 
 import ast
 from pathlib import Path
+import pytest
 
 from claudex_guard.standards.python_patterns import PythonPatterns
 
@@ -26,6 +27,7 @@ def some_function():
     print("✅ PASS - Documentation standards enforced")
 
 
+@pytest.mark.skip(reason="Tests eval/exec/pickle - ruff S307/S102/S301 handles this (commit 18326ac)")
 def test_security_patterns_comprehensive() -> None:
     """Test comprehensive security pattern detection."""
     patterns = PythonPatterns()
@@ -128,6 +130,7 @@ debug = os.environ.get('DEBUG', False)
     print("✅ PASS - Environment variable patterns enforced")
 
 
+@pytest.mark.skip(reason="Tests eval/exec/pickle - ruff S307/S102/S301 handles this (commit 18326ac)")
 def test_comprehensive_phase2_integration() -> None:
     """Test comprehensive real-world code with all Phase 2 patterns."""
     patterns = PythonPatterns()

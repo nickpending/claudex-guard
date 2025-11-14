@@ -70,7 +70,6 @@ class RustEnforcer(BaseEnforcer):
         # Check for banned crates
         violations.extend(self.patterns.check_banned_crates(content, file_path))
 
-        # Check for .unwrap() abuse
-        violations.extend(self.patterns.check_unwrap_usage(lines, file_path))
+        # NOTE: .unwrap() check removed - Clippy unwrap_used handles this
 
         return violations

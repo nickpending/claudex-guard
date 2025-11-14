@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "claudex-guard"
-version = "0.3.4"
+version = "0.3.5"
 description = "Automated code quality enforcement for AI-assisted development workflows"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -53,7 +53,6 @@ packages = ["src/claudex_guard"]
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
-    "/configs",
     "/README.md",
     "/LICENSE"
 ]

@@ -82,3 +82,6 @@ htmlcov/
 
 # Temporary test files
 /tmp/test_*.py
+
+# Node.js dependencies (for TypeScript linting)
+node_modules/

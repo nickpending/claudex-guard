@@ -126,8 +126,7 @@ claudex-guard/
 │   ├── services/                # Supporting services
 │   │   └── auto_fixer.py        # Automatic code fixing
 │   └── main.py                  # CLI entry point
-├── configs/                     # External standards files
-└── tests/                       # 43 comprehensive tests
+└── tests/                       # 70 comprehensive tests
     ├── test_python_patterns.py         # Pattern detection tests
     ├── test_python_enforcer_integration.py # End-to-end tests
     ├── test_comprehensive_ast_detection.py # AST analysis tests
@@ -193,12 +192,6 @@ mock_detection:
 
 ## Configuration
 
-### Global Configuration
-Copy standards files to your project:
-```bash
-cp configs/claudex-python.md your-project/
-```
-
 ### Project-Specific Rules
 Create `.claudex-guard.yaml` in your project root:
 ```yaml
@@ -249,17 +242,19 @@ sqlite3 ~/.config/claudex-guard/violations.db \
 
 ### Adding New Language Support
 
-1. Create language-specific enforcer:
+1. Create language-specific enforcer in `src/claudex_guard/enforcers/`:
 ```bash
-cp scripts/claudex-guard-python.py scripts/claudex-guard-newlang.py
+cp src/claudex_guard/enforcers/python.py src/claudex_guard/enforcers/newlang.py
 ```
 
-2. Create language standards:
+2. Create language pattern definitions in `src/claudex_guard/standards/`:
 ```bash
-cp configs/claudex-python.md configs/claudex-newlang.md
+cp src/claudex_guard/standards/python_patterns.py src/claudex_guard/standards/newlang_patterns.py
 ```
 
-3. Implement language-specific patterns in the enforcer script
+3. Implement language-specific patterns and integrate with existing linters
+4. Add file extension mapping to `BaseEnforcer.EXTENSION_MAP`
+5. Write comprehensive tests in `tests/`
 
 ### Testing
 

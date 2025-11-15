@@ -14,14 +14,13 @@ This is the system that eliminates /complete-task entirely.
 import ast
 import sys
 from pathlib import Path
-from typing import List
 
 # Import modular components for PythonEnforcer
 from ..core.base_enforcer import BaseEnforcer
-from ..core.violation import Violation
 from ..core.utils import is_text_file
-from ..standards.python_patterns import PythonPatterns
+from ..core.violation import Violation
 from ..services.auto_fixer import PythonAutoFixer
+from ..standards.python_patterns import PythonPatterns
 
 
 def main() -> int:
@@ -44,23 +43,25 @@ class PythonEnforcer(BaseEnforcer):
         """Check if file is Python (.py extension)."""
         return file_path.suffix == ".py"
 
-    def apply_automatic_fixes(self, file_path: Path) -> List[str]:
+    def apply_automatic_fixes(self, file_path: Path) -> list[str]:
         """Apply automatic fixes via ruff/mypy integration."""
         return self.auto_fixer.apply_fixes(file_path)
 
-    def _run_ruff_analysis(self, file_path: Path) -> List[Violation]:
-        """Run ruff check for security and quality violations (S, B, UP rules)."""
-        import subprocess
+    def _run_ruff_analysis(self, file_path: Path) -> list[Violation]:
+        """Run ruff check for security and quality violations."""
         import json
+        import subprocess
 
         violations = []
         try:
+            # Use --extend-select to layer security rules on top of project config
+            # This respects per-file-ignores (e.g., S101 in test files)
             result = subprocess.run(
                 [
                     "ruff",
                     "check",
                     str(file_path),
-                    "--select=S,B,UP",  # Security, bugs, upgrades
+                    "--extend-select=S,B,UP",  # Security, bugs, upgrades
                     "--output-format=json",
                 ],
                 capture_output=True,
@@ -92,7 +93,7 @@ class PythonEnforcer(BaseEnforcer):
 
         return violations
 
-    def analyze_file(self, file_path: Path) -> List[Violation]:
+    def analyze_file(self, file_path: Path) -> list[Violation]:
         """Analyze Python file using AST and pattern detection."""
         violations = []
 

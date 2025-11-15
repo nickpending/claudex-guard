@@ -74,9 +74,15 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 # Language enforcers that shell out to linters/compilers
+"src/claudex_guard/enforcers/python.py" = ["S603", "S607"]
 "src/claudex_guard/standards/typescript_patterns.py" = ["S603", "S607"]
 "src/claudex_guard/standards/rust_patterns.py" = ["S603", "S607"]
 "src/claudex_guard/standards/go_patterns.py" = ["S603", "S607"]
+# Auto-fixers shell out to formatters/linters
+"src/claudex_guard/services/auto_fixer.py" = ["S603", "S607"]
+"src/claudex_guard/services/typescript_auto_fixer.py" = ["S603", "S607"]
+"src/claudex_guard/services/rust_auto_fixer.py" = ["S603", "S607"]
+"src/claudex_guard/services/go_auto_fixer.py" = ["S603", "S607"]
 # Test files legitimately use assert and subprocess
 "tests/**/*.py" = ["S101", "S603", "S607"]
 

@@ -391,3 +391,82 @@ def test_factory_routing_case_insensitive_extension() -> None:
         assert exit_code != 1  # Not an error
     finally:
         test_file.unlink()
+
+
+def test_typescript_respects_tsconfig_compiler_options() -> None:
+    """Test that tsc integration respects project tsconfig.json settings.
+
+    Regression test for bug where tsc ran without project context, defaulting to
+    ancient compiler options that don't include Map, Set, private identifiers, etc.
+    """
+    import os
+
+    # Create temp directory with tsconfig.json and TypeScript file
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir)
+
+        # Create tsconfig.json with ES2015+ settings (includes Map, Set, etc.)
+        tsconfig = {
+            "compilerOptions": {
+                "target": "ES2015",
+                "lib": ["ES2015", "DOM"],
+                "module": "commonjs",
+                "strict": True,
+            }
+        }
+        tsconfig_path = project_dir / "tsconfig.json"
+        tsconfig_path.write_text(json.dumps(tsconfig, indent=2))
+
+        # Create TypeScript file using ES2015+ features
+        # These would error without tsconfig context (Map/Set/private identifiers)
+        ts_code = """class Store {
+    #privateData: Map<string, any>;
+
+    constructor() {
+        this.#privateData = new Map();
+    }
+
+    add(key: string, value: any): void {
+        this.#privateData.set(key, value);
+    }
+
+    getAll(): Set<string> {
+        return new Set(this.#privateData.keys());
+    }
+}
+
+export const store = new Store();
+"""
+        test_file = project_dir / "store.ts"
+        test_file.write_text(ts_code)
+
+        # Run enforcer with environment variable
+        env = os.environ.copy()
+        env["CLAUDE_FILE_PATHS"] = str(test_file)
+
+        result = subprocess.run(
+            ["uv", "run", "python", "-m", "claudex_guard.main"],
+            text=True,
+            capture_output=True,
+            cwd=Path(__file__).parent.parent,
+            env=env,
+        )
+
+        # Should not report false positives about Map/Set/private identifiers
+        # These are valid ES2015+ features that tsconfig enables
+        assert "Cannot find name 'Map'" not in result.stdout, (
+            "Bug: tsc not respecting tsconfig.json - Map should be available in ES2015"
+        )
+        assert "Cannot find name 'Set'" not in result.stdout, (
+            "Bug: tsc not respecting tsconfig.json - Set should be available in ES2015"
+        )
+        assert (
+            "Private identifiers are only available when targeting ECMAScript 2015"
+            not in result.stdout
+        ), (
+            "Bug: tsc not respecting tsconfig.json - private identifiers should be available"
+        )
+
+        # Valid TypeScript should pass or have legitimate violations only
+        # (not false positives from missing tsconfig context)
+        assert result.returncode in (0, 2), f"Unexpected exit code {result.returncode}"

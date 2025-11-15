@@ -52,7 +52,8 @@ class PythonAutoFixer:
     def _run_ruff_check_fix(self, file_path: Path) -> bool:
         """Run ruff linting with automatic fixes (strict enforcement mode)."""
         try:
-            # Strict enforcement - no development mode compromises
+            # Use --extend-select to layer security rules on top of project config
+            # This respects per-file-ignores (e.g., S101 in test files)
             result = subprocess.run(
                 [
                     "ruff",
@@ -60,7 +61,7 @@ class PythonAutoFixer:
                     "--fix",
                     str(file_path),
                     # Security, bugs, upgrades, errors, imports
-                    "--select=S,B,UP,E,F,W,I",
+                    "--extend-select=S,B,UP,E,F,W,I",
                 ],
                 capture_output=True,
                 text=True,

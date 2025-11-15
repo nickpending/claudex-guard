@@ -108,11 +108,24 @@ class TypeScriptPatterns:
         violations: list[Violation] = []
 
         try:
+            # Find tsconfig.json by walking up directory tree
+            tsconfig_dir = file_path.parent
+            while tsconfig_dir != tsconfig_dir.parent:
+                if (tsconfig_dir / "tsconfig.json").exists():
+                    break
+                tsconfig_dir = tsconfig_dir.parent
+            else:
+                # No tsconfig.json found - use file's parent directory
+                tsconfig_dir = file_path.parent
+
+            # Run tsc with working directory set to tsconfig location
+            # This ensures tsc loads the project's compiler options
             result = subprocess.run(  # noqa: S603, S607
                 ["tsc", "--noEmit", str(file_path)],
                 capture_output=True,
                 text=True,
                 timeout=30,
+                cwd=str(tsconfig_dir),
             )
 
             # Parse tsc output format: "file.ts(line,col): error TS#### message"

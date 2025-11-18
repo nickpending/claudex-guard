@@ -110,18 +110,42 @@ class TypeScriptPatterns:
         try:
             # Find tsconfig.json by walking up directory tree
             tsconfig_dir = file_path.parent
+            tsconfig_found = False
             while tsconfig_dir != tsconfig_dir.parent:
                 if (tsconfig_dir / "tsconfig.json").exists():
+                    tsconfig_found = True
                     break
                 tsconfig_dir = tsconfig_dir.parent
+
+            # Build tsc command with appropriate options
+            if tsconfig_found:
+                # Project has tsconfig - respect it fully (strict enforcement)
+                tsc_cmd = ["tsc", "--noEmit", str(file_path)]
+                severity = "error"
             else:
-                # No tsconfig.json found - use file's parent directory
+                # Standalone file - use modern permissive defaults (educational)
+                # Settings match Bun/Node/Deno reality
+                # Catch real bugs not config issues
+                tsc_cmd = [
+                    "tsc",
+                    "--noEmit",
+                    "--target",
+                    "ES2020",
+                    "--lib",
+                    "ES2020,DOM",
+                    "--skipLibCheck",
+                    "--moduleResolution",
+                    "bundler",
+                    "--allowImportingTsExtensions",
+                    "--esModuleInterop",
+                    str(file_path),
+                ]
+                severity = "warning"
                 tsconfig_dir = file_path.parent
 
             # Run tsc with working directory set to tsconfig location
-            # This ensures tsc loads the project's compiler options
             result = subprocess.run(  # noqa: S603, S607
-                ["tsc", "--noEmit", str(file_path)],
+                tsc_cmd,
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -142,7 +166,7 @@ class TypeScriptPatterns:
                                 line_num=int(line_num),
                                 violation_type=f"typescript_{error_code}",
                                 message=f"TypeScript: {message}",
-                                severity="error",
+                                severity=severity,
                                 language_context={
                                     "error_code": error_code,
                                     "column": int(col),

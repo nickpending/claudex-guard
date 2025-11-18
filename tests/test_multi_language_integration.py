@@ -464,9 +464,67 @@ export const store = new Store();
             "Private identifiers are only available when targeting ECMAScript 2015"
             not in result.stdout
         ), (
-            "Bug: tsc not respecting tsconfig.json - private identifiers should be available"
+            "Bug: tsc not respecting tsconfig.json - "
+            "private identifiers should be available"
         )
 
         # Valid TypeScript should pass or have legitimate violations only
         # (not false positives from missing tsconfig context)
         assert result.returncode in (0, 2), f"Unexpected exit code {result.returncode}"
+
+
+def test_typescript_standalone_file_smart_defaults() -> None:
+    """Test that standalone TS files without tsconfig get modern defaults.
+
+    Regression test for bug where standalone files (Bun hooks, Node scripts)
+    got strict ES5 defaults causing false positives for Node/Bun built-ins.
+    """
+    import os
+
+    # Create standalone TypeScript file (no tsconfig.json)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir)
+
+        # Standalone TS file using Node/Bun built-ins
+        ts_code = """import { readFileSync } from 'fs';
+import { join } from 'path';
+
+async function processFile(filename: string): Promise<void> {
+    const content = readFileSync(join(process.cwd(), filename), 'utf-8');
+    console.log(`Processed ${content.length} bytes`);
+}
+
+export { processFile };
+"""
+        test_file = project_dir / "script.ts"
+        test_file.write_text(ts_code)
+
+        # Run enforcer
+        env = os.environ.copy()
+        env["CLAUDE_FILE_PATHS"] = str(test_file)
+
+        result = subprocess.run(
+            ["uv", "run", "python", "-m", "claudex_guard.main"],
+            text=True,
+            capture_output=True,
+            cwd=Path(__file__).parent.parent,
+            env=env,
+        )
+
+        # Should NOT have false positives about Node built-ins
+        assert "Cannot find module 'fs'" not in result.stdout, (
+            "Bug: standalone file should have modern defaults with Node types"
+        )
+        assert "Cannot find module 'path'" not in result.stdout
+        assert "Cannot find name 'process'" not in result.stdout
+        assert "Cannot find name 'Promise'" not in result.stdout
+
+        # Should still catch console.log as WARNING (not ERROR)
+        if "console" in result.stdout.lower():
+            # If console violation found, should be warning not blocking
+            assert result.returncode == 0, "console.log should be WARNING not ERROR"
+
+        # Should pass or have non-blocking warnings only
+        assert result.returncode in (0,), (
+            f"Standalone file should pass with smart defaults, got {result.returncode}"
+        )

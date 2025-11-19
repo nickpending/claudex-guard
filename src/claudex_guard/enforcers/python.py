@@ -47,12 +47,29 @@ class PythonEnforcer(BaseEnforcer):
         """Apply automatic fixes via ruff/mypy integration."""
         return self.auto_fixer.apply_fixes(file_path)
 
+    def _is_test_file(self, file_path: Path) -> bool:
+        """Check if file is a test file."""
+        file_str = str(file_path).lower()
+        file_name = file_path.name.lower()
+
+        # Check file name patterns
+        if file_name.startswith("test_") or file_name.endswith("_test.py"):
+            return True
+
+        # Check if in test directory
+        if "/tests/" in file_str or "/test/" in file_str:
+            return True
+
+        return False
+
     def _run_ruff_analysis(self, file_path: Path) -> list[Violation]:
         """Run ruff check for security and quality violations."""
         import json
         import subprocess
 
         violations = []
+        is_test_file = self._is_test_file(file_path)
+
         try:
             # Use --extend-select to layer security rules on top of project config
             # This respects per-file-ignores (e.g., S101 in test files)
@@ -76,15 +93,23 @@ class PythonEnforcer(BaseEnforcer):
                     if "SyntaxError" in rv.get("message", ""):
                         continue
 
+                    code = rv.get("code", "")
+                    message = rv.get("message", "Ruff violation")
+                    fix_suggestion = (
+                        rv.get("fix", {}).get("message", "") if rv.get("fix") else ""
+                    )
+
+                    # Enhanced error message for test file violations
+                    if is_test_file and code in ["S101", "S603", "S607"]:
+                        fix_suggestion = self._get_test_file_config_suggestion(code)
+
                     violations.append(
                         Violation(
                             str(file_path),
                             rv.get("location", {}).get("row", 0),
-                            rv.get("code", "ruff"),
-                            rv.get("message", "Ruff violation"),
-                            rv.get("fix", {}).get("message", "")
-                            if rv.get("fix")
-                            else "",
+                            code,
+                            message,
+                            fix_suggestion,
                             "error",
                         )
                     )
@@ -92,6 +117,29 @@ class PythonEnforcer(BaseEnforcer):
             pass  # Ruff not available or failed - graceful degradation
 
         return violations
+
+    def _get_test_file_config_suggestion(self, code: str) -> str:
+        """Generate helpful config suggestion for test file violations."""
+        rule_descriptions = {
+            "S101": "assert usage (legitimate in pytest tests)",
+            "S603": "subprocess without shell=True check (safe in tests)",
+            "S607": "subprocess call with string path (acceptable in tests)",
+        }
+
+        description = rule_descriptions.get(code, "rule")
+
+        return f"""Test files need per-file-ignores in pyproject.toml.
+
+Add this to your pyproject.toml:
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S603", "S607"]
+"test_*.py" = ["S101", "S603", "S607"]
+"**/test_*.py" = ["S101", "S603", "S607"]
+
+This excludes {code} ({description}) from test files while maintaining
+security checks in production code.
+"""
 
     def analyze_file(self, file_path: Path) -> list[Violation]:
         """Analyze Python file using AST and pattern detection."""
@@ -107,7 +155,10 @@ class PythonEnforcer(BaseEnforcer):
                         str(file_path),
                         0,
                         "file_too_large",
-                        f"File too large: {file_size:,} bytes (limit: {MAX_FILE_SIZE:,} bytes)",
+                        (
+                            f"File too large: {file_size:,} bytes "
+                            f"(limit: {MAX_FILE_SIZE:,} bytes)"
+                        ),
                         "Split large files or increase MAX_FILE_SIZE limit if needed",
                         "error",
                     )

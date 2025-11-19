@@ -190,6 +190,34 @@ mock_detection:
 - mypy type checking integration
 - Graceful handling of missing tools
 
+## Python Project Setup
+
+For Python projects, claudex-guard requires minimal ruff configuration in your
+`pyproject.toml` to properly handle test files:
+
+```toml
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S603", "S607"]
+"test_*.py" = ["S101", "S603", "S607"]
+"**/test_*.py" = ["S101", "S603", "S607"]
+```
+
+**What this does:**
+- `S101` - Allows `assert` statements in test files (legitimate in pytest)
+- `S603/S607` - Allows subprocess usage in test files (safe in tests)
+
+**Why it's needed:**
+claudex-guard extends ruff's security rules (`--extend-select=S`) to catch
+AI-generated security issues. Without per-file-ignores, pytest tests with
+`assert` statements would incorrectly trigger security warnings.
+
+**Self-correcting:**
+If you forget this config, claudex-guard will detect test file violations
+and show you the exact pyproject.toml configuration to add.
+
 ## Configuration
 
 ### Project-Specific Rules

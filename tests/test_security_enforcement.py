@@ -93,7 +93,8 @@ def test_typescript_innerhtml_detection() -> None:
     """Test that innerHTML usage is caught by Microsoft SDL plugin."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".ts", delete=False) as f:
         f.write(
-            'const input = "test";\ndocument.getElementById("content").innerHTML = input;\n'
+            'const input = "test";\n'
+            'document.getElementById("content").innerHTML = input;\n'
         )
         f.flush()
         temp_path = Path(f.name)
@@ -194,3 +195,62 @@ def test_success_output_visibility() -> None:
         assert "✓" in result.stdout or "Quality checks" in result.stdout
     finally:
         temp_path.unlink()
+
+
+def test_typescript_tsconfig_types_respected() -> None:
+    """Test that tsconfig.json types array is respected for module resolution.
+
+    Regression test for bun:sqlite false positive where tsc ignored tsconfig
+    when run with explicit file path instead of -p flag.
+    """
+    import json
+    import os
+
+    # Create temp directory with tsconfig and bun-types
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmppath = Path(tmpdir)
+
+        # Write tsconfig with bun-types
+        tsconfig = {
+            "compilerOptions": {
+                "types": ["bun-types"],
+                "target": "ES2020",
+                "module": "ESNext",
+                "moduleResolution": "bundler",
+            }
+        }
+        (tmppath / "tsconfig.json").write_text(json.dumps(tsconfig))
+
+        # Write package.json and install bun-types
+        package_json = {"devDependencies": {"bun-types": "latest"}}
+        (tmppath / "package.json").write_text(json.dumps(package_json))
+
+        # Install bun-types (skip test if pnpm not available)
+        install_result = subprocess.run(
+            ["pnpm", "install"],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+        )
+        if install_result.returncode != 0:
+            import pytest
+
+            pytest.skip("pnpm not available for bun-types install")
+
+        # Write TypeScript file using bun:sqlite
+        ts_file = tmppath / "test.ts"
+        ts_file.write_text('import { Database } from "bun:sqlite";\n')
+
+        # Run enforcer - should NOT flag bun:sqlite as unresolved
+        result = subprocess.run(
+            ["python", "-m", "claudex_guard.main", "--mode", "post", str(ts_file)],
+            capture_output=True,
+            text=True,
+            cwd=tmpdir,
+            env={**os.environ, "PYTHONPATH": str(Path.cwd() / "src")},
+        )
+
+        # Should pass - bun:sqlite resolves via tsconfig types
+        assert "TS2307" not in result.stderr, (
+            f"bun:sqlite should resolve via tsconfig types: {result.stderr}"
+        )

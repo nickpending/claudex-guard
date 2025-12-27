@@ -119,9 +119,13 @@ class TypeScriptPatterns:
 
             # Build tsc command with appropriate options
             if tsconfig_found:
-                # Project has tsconfig - respect it fully (strict enforcement)
-                tsc_cmd = ["tsc", "--noEmit", str(file_path)]
+                # Project has tsconfig - use -p to respect all settings
+                # Can't combine -p with file args, so check project and filter
+                tsconfig_path = tsconfig_dir / "tsconfig.json"
+                tsc_cmd = ["tsc", "--noEmit", "-p", str(tsconfig_path)]
                 severity = "error"
+                # Resolve target file for filtering (tsc output uses resolved paths)
+                target_file = file_path.resolve()
             else:
                 # Standalone file - use modern permissive defaults (educational)
                 # Settings match Bun/Node/Deno reality
@@ -142,6 +146,7 @@ class TypeScriptPatterns:
                 ]
                 severity = "warning"
                 tsconfig_dir = file_path.parent
+                target_file = None  # No filtering needed for single-file mode
 
             # Run tsc with working directory set to tsconfig location
             result = subprocess.run(  # noqa: S603, S607
@@ -156,10 +161,15 @@ class TypeScriptPatterns:
             if result.stdout:
                 for line in result.stdout.splitlines():
                     match = re.match(
-                        r".*\((\d+),(\d+)\):\s+error\s+(TS\d+):\s+(.+)", line
+                        r"(.+)\((\d+),(\d+)\):\s+error\s+(TS\d+):\s+(.+)", line
                     )
                     if match:
-                        line_num, col, error_code, message = match.groups()
+                        error_file, line_num, col, error_code, message = match.groups()
+                        # Filter to target file when using -p (whole project mode)
+                        if target_file is not None:
+                            error_path = (tsconfig_dir / error_file).resolve()
+                            if error_path != target_file:
+                                continue
                         violations.append(
                             Violation(
                                 file_path=str(file_path),
